@@ -504,17 +504,17 @@ export function Dashboard() {
         <div className="max-w-7xl mx-auto">
           {/* Banner de instalação do app - visível especialmente em mobile */}
           {showInstallButton && (
-            <div className="mb-6 p-5 bg-indigo-600 dark:bg-indigo-500 rounded-lg shadow-lg animate-pulse-slow">
-              <div className="flex flex-col items-center text-center">
-                <div className="flex items-center justify-center mb-3">
-                  <Download className="h-8 w-8 text-white mr-2" />
-                  <p className="text-base md:text-lg font-medium text-white">
+            <div className="mb-6 p-3 md:p-4 bg-indigo-600 dark:bg-indigo-500 rounded-lg shadow-lg animate-pulse-slow">
+              <div className="flex flex-col md:flex-row md:justify-between items-center">
+                <div className="flex items-center justify-center mb-3 md:mb-0">
+                  <Download className="h-6 w-6 md:h-5 md:w-5 text-white mr-2" />
+                  <p className="text-sm md:text-base font-medium text-white">
                     Instale o app para uma experiência melhor
                   </p>
                 </div>
                 <button
                   onClick={installPWA}
-                  className="w-full md:w-3/4 lg:w-1/2 py-3 px-5 mt-2 rounded-lg text-base font-medium text-indigo-600 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
+                  className="w-full md:w-auto py-2 px-4 rounded-lg text-sm font-medium text-indigo-600 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
                 >
                   Instalar App
                 </button>
