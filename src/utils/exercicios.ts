@@ -54,6 +54,14 @@ export const encontrarVideoDoExercicio = (textoExercicio: string, origem?: 'WEB'
     return null;
   }
 
+  // Verificar cache local para esta sessão
+  const cacheKey = `video_${textoExercicio.trim()}`;
+  const cachedResult = sessionStorage.getItem(cacheKey);
+  if (cachedResult) {
+    console.log(`[encontrarVideoDoExercicio] Retornando do cache: ${cachedResult}`);
+    return cachedResult === "null" ? null : cachedResult;
+  }
+
   // Normalizar o texto para comparação
   const normalizarTextoCompleto = (texto: string): string => {
     console.log(`[encontrarVideoDoExercicio] Normalizando texto: "${texto}"`);
@@ -91,6 +99,7 @@ export const encontrarVideoDoExercicio = (textoExercicio: string, origem?: 'WEB'
   
   // Lista de vídeos disponíveis (adicionar aqui novos exercícios)
   const videosExercicios: Record<string, string> = {
+
     "CRUCIFIXO MÁQUINA 3 X 10": "https://www.youtube.com/watch?v=xfe51AZ4HR5",
     "PANTURRILHA VERTICAL MÁQUINA 4 X 15/12/10/8": "https://www.youtube.com/watch?v=V-C4G7AOlQw",
     "REMADA BAIXA SENTADA ABERTA C/ BARRA RETA 3 X 10": "https://www.youtube.com/watch?v=t0W9RZEHiV5",
@@ -551,26 +560,60 @@ export const encontrarVideoDoExercicio = (textoExercicio: string, origem?: 'WEB'
     "SUPINO RETO MÁQUINA   3 X 10": "https://www.youtube.com/watch?v=dEu4xyuGT1u",
     "AGACHAMENTO SUMÔ C/ HALTERES OU KETTEBELL    3 X 15/12/10": "https://www.youtube.com/watch?v=AYBDQWrCDW5",
     "EXTENSÃO DE QUADRIL DE 4 APOIOS C/ CANELEIRA E PERNA ESTICADA 3 X 15": "https://www.youtube.com/watch?v=K9dVr-uzGct"
+
   };
   
-  // Buscar correspondência
+  // Tentar encontrar correspondência exata no texto normalizado
   for (const [exercicio, url] of Object.entries(videosExercicios)) {
     const exercicioNormalizado = normalizarTextoCompleto(exercicio);
-    
-    console.log(`[encontrarVideoDoExercicio] Comparando com "${exercicio}" (${exercicioNormalizado})`);
-    
-    // Verificar correspondência
-    if (
-      textoNormalizado.includes(exercicioNormalizado) || 
-      exercicioNormalizado.includes(textoNormalizado) ||
-      nomeEssencial.includes(exercicioNormalizado) ||
-      exercicioNormalizado.includes(nomeEssencial)
-    ) {
-      console.log(`[encontrarVideoDoExercicio] Encontrado vídeo: ${url}`);
+    if (textoNormalizado === exercicioNormalizado) {
+      console.log(`[encontrarVideoDoExercicio] Correspondência exata encontrada para: "${exercicio}"`);
+      sessionStorage.setItem(cacheKey, url);
       return url;
     }
   }
   
-  console.log('[encontrarVideoDoExercicio] Nenhum vídeo encontrado');
+  // Tentar encontrar correspondência com base no nome essencial
+  for (const [exercicio, url] of Object.entries(videosExercicios)) {
+    const exercicioEssencial = extrairNomeEssencial(exercicio);
+    if (nomeEssencial === exercicioEssencial) {
+      console.log(`[encontrarVideoDoExercicio] Correspondência pelo nome essencial: "${exercicio}"`);
+      sessionStorage.setItem(cacheKey, url);
+      return url;
+    }
+  }
+  
+  // Verificar se o nome essencial está contido em algum dos exercícios
+  for (const [exercicio, url] of Object.entries(videosExercicios)) {
+    const exercicioEssencial = extrairNomeEssencial(exercicio);
+    if (exercicioEssencial.includes(nomeEssencial) || nomeEssencial.includes(exercicioEssencial)) {
+      console.log(`[encontrarVideoDoExercicio] Correspondência parcial: "${exercicio}"`);
+      sessionStorage.setItem(cacheKey, url);
+      return url;
+    }
+  }
+  
+  // Busca por palavras-chave principais
+  const palavrasChave = nomeEssencial.split(' ').filter(p => p.length > 3);
+  if (palavrasChave.length > 0) {
+    for (const [exercicio, url] of Object.entries(videosExercicios)) {
+      const exercicioEssencial = extrairNomeEssencial(exercicio);
+      const palavrasExercicio = exercicioEssencial.split(' ');
+      
+      // Se pelo menos 2 palavras-chave coincidem, considere uma correspondência
+      const palavrasCoincidentes = palavrasChave.filter(p => 
+        palavrasExercicio.some(pe => pe.includes(p) || p.includes(pe))
+      );
+      
+      if (palavrasCoincidentes.length >= Math.min(2, palavrasChave.length)) {
+        console.log(`[encontrarVideoDoExercicio] Correspondência por palavras-chave: "${exercicio}"`);
+        sessionStorage.setItem(cacheKey, url);
+        return url;
+      }
+    }
+  }
+  
+  console.log(`[encontrarVideoDoExercicio] Nenhum vídeo encontrado para: "${textoExercicio}"`);
+  sessionStorage.setItem(cacheKey, "null");
   return null;
 }; 

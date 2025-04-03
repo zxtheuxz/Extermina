@@ -46,10 +46,10 @@ interface Perfil {
 }
 
 interface DadosFisicos {
-  objetivo: string;
-  tempo_inativo: string;
-  experiencia_musculacao: string;
-  disponibilidade_semanal: number;
+  objetivo?: string;
+  tempo_inativo?: string;
+  experiencia_musculacao?: string;
+  disponibilidade_semanal?: number | string;
 }
 
 // Componente para exibir o modal de vídeo (memoizado)
@@ -134,25 +134,11 @@ export function ResultadoFisico() {
   const queryParams = new URLSearchParams(location.search);
   const id = queryParams.get('id');
 
-  // Carregar cache de vídeos do localStorage na inicialização
+  // Adicionar useEffect para limpar o cache da sessão
   useEffect(() => {
-    try {
-      const storedCache = localStorage.getItem('videoUrlCache');
-      if (storedCache) {
-        const parsedCache = JSON.parse(storedCache);
-        const newCache = new Map<string, string | null>();
-        
-        // Converter objeto JSON de volta para Map
-        Object.keys(parsedCache).forEach(key => {
-          newCache.set(key, parsedCache[key]);
-        });
-        
-        console.log(`[Cache] Carregado ${newCache.size} URLs de vídeo do localStorage`);
-        videoUrlCache.current = newCache;
-      }
-    } catch (error) {
-      console.error('Erro ao carregar cache de vídeos:', error);
-    }
+    console.log('[ResultadoFisico] Componente montado, limpando caches');
+    // Limpar o cache da sessão na inicialização da página
+    sessionStorage.clear();
   }, []);
 
   // Atualize o estilo da scrollbar dinamicamente
@@ -354,22 +340,6 @@ export function ResultadoFisico() {
   // Processamento único dos dados quando o perfil muda
   useEffect(() => {
     if (perfil?.resultado_fisica) {
-      // Verificar se já temos os treinos processados no localStorage
-      const storageKey = `treinosProcessados_${id || 'user'}`;
-      
-      try {
-        const storedTreinos = localStorage.getItem(storageKey);
-        
-        if (storedTreinos) {
-          console.log('Carregando treinos processados do localStorage');
-          setTreinosProcessados(JSON.parse(storedTreinos));
-          setEhFichaTreino(true);
-          return;
-        }
-      } catch (error) {
-        console.error('Erro ao carregar treinos do localStorage:', error);
-      }
-      
       const conteudo = perfil.resultado_fisica;
       
       // Verificar se parece ser uma ficha de treino
@@ -492,38 +462,39 @@ export function ResultadoFisico() {
         
         const treinos = processarConteudoTreino();
         setTreinosProcessados(treinos);
-        
-        // Salvar treinos processados no localStorage
-        try {
-          localStorage.setItem(storageKey, JSON.stringify(treinos));
-          console.log('Treinos processados salvos no localStorage');
-        } catch (error) {
-          console.error('Erro ao salvar treinos no localStorage:', error);
-        }
       }
     }
   }, [perfil?.resultado_fisica, id]);
 
-  // Versão memoizada da função encontrarVideoDoExercicio com persistência no localStorage
+  // Modificar a função encontrarVideoDoExercicioMemoizado para salvar no localStorage após a primeira busca
   const encontrarVideoDoExercicioMemoizado = React.useCallback((nomeExercicio: string, dispositivo: 'APP' | 'WEB' | 'PDF' = 'WEB') => {
-    const cacheKey = `${nomeExercicio}_${dispositivo}`;
+    console.log(`[ResultadoFisico] Buscando vídeo para: "${nomeExercicio}"`);
+    const cacheKey = `video_${nomeExercicio.trim()}_${dispositivo}`;
     
-    // Verificar se já temos o URL no cache
-    if (videoUrlCache.current.has(cacheKey)) {
-      return videoUrlCache.current.get(cacheKey);
+    // Verificar se já temos o URL no cache da sessão atual
+    const cachedResult = sessionStorage.getItem(cacheKey);
+    if (cachedResult) {
+      console.log(`[ResultadoFisico] Retornando do cache da sessão: ${cachedResult}`);
+      return cachedResult === "null" ? null : cachedResult;
     }
     
-    // Se não tiver no cache, buscar o URL e armazenar
-    const videoUrl = encontrarVideoUtils(nomeExercicio, dispositivo);
-    videoUrlCache.current.set(cacheKey, videoUrl);
+    // Verificar se já temos o URL no cache da referência
+    if (videoUrlCache.current.has(cacheKey)) {
+      const result = videoUrlCache.current.get(cacheKey);
+      console.log(`[ResultadoFisico] Retornando do cache da referência: ${result}`);
+      return result;
+    }
     
-    // Salvar cache atualizado no localStorage
+    // Se não tiver no cache, buscar o URL
+    console.log(`[ResultadoFisico] Não encontrado em cache, buscando o URL do vídeo`);
+    const videoUrl = encontrarVideoUtils(nomeExercicio, dispositivo);
+    
+    // Atualizar os caches
+    videoUrlCache.current.set(cacheKey, videoUrl);
     try {
-      // Converter Map para objeto JSON
-      const cacheObject = Object.fromEntries(videoUrlCache.current.entries());
-      localStorage.setItem('videoUrlCache', JSON.stringify(cacheObject));
+      sessionStorage.setItem(cacheKey, videoUrl || "null");
     } catch (error) {
-      console.error('Erro ao salvar cache de vídeos:', error);
+      console.error('[ResultadoFisico] Erro ao salvar no cache:', error);
     }
     
     return videoUrl;
@@ -1107,7 +1078,9 @@ export function ResultadoFisico() {
                   Tempo Inativo
                 </span>
                 <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {dadosFisicos.tempo_inativo.replace(/_/g, '-').replace(/_meses$/, ' meses')}
+                  {typeof dadosFisicos?.tempo_inativo === 'string' 
+                    ? dadosFisicos.tempo_inativo.replace(/_/g, '-').replace(/_meses$/, ' meses')
+                    : dadosFisicos?.tempo_inativo || 'Não informado'}
                 </span>
               </div>
               
