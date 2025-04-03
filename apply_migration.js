@@ -25,6 +25,9 @@ async function aplicarMigracao() {
     const sqlPath = path.join(__dirname, 'supabase/migrations/20250301000000_add_avaliacao_nutricional_feminino.sql');
     const sqlContent = fs.readFileSync(sqlPath, 'utf8');
     
+    // Antes de uma função suspeita
+    console.time("funcaoPesada");
+
     // Executar o SQL usando a função rpc do Supabase
     const { data, error } = await supabase.rpc('exec_sql', { sql: sqlContent });
     
@@ -35,6 +38,9 @@ async function aplicarMigracao() {
     
     console.log('Migração aplicada com sucesso!');
     console.log('Resultado:', data);
+    
+    // Após a função
+    console.timeEnd("funcaoPesada");
     
   } catch (error) {
     console.error('Erro ao processar migração:', error);

@@ -6,8 +6,12 @@ import { AvaliacaoNutricionalMasculina } from '../pages/AvaliacaoNutricionalMasc
 import { AvaliacaoNutricionalFeminina } from '../pages/AvaliacaoNutricionalFeminina';
 import { AvaliacaoFisica } from '../pages/AvaliacaoFisica';
 import { RedefinirSenha } from '../pages/RedefinirSenha';
+import { Resultados } from '../pages/Resultados';
+import { ResultadoFisico } from '../pages/ResultadoFisico';
 import { PrivateRoute } from '../components/PrivateRoute';
 import { ProtectedFormRoute } from './ProtectedFormRoute';
+import { MaintenancePage } from '../pages/MaintenancePage';
+import { Layout } from '../components/Layout';
 
 // Componente temporário para configurações
 const Configuracoes = () => <div>Página de Configurações</div>;
@@ -23,7 +27,9 @@ export function AppRoutes() {
         path="/" 
         element={
           <PrivateRoute>
-            <Dashboard />
+            <Layout>
+              <Dashboard />
+            </Layout>
           </PrivateRoute>
         } 
       />
@@ -31,7 +37,9 @@ export function AppRoutes() {
         path="/dashboard" 
         element={
           <PrivateRoute>
-            <Dashboard />
+            <Layout>
+              <Dashboard />
+            </Layout>
           </PrivateRoute>
         } 
       />
@@ -39,7 +47,44 @@ export function AppRoutes() {
         path="/configuracoes" 
         element={
           <PrivateRoute>
-            <Configuracoes />
+            <Layout>
+              <Configuracoes />
+            </Layout>
+          </PrivateRoute>
+        } 
+      />
+      
+      {/* Rota para a página de fotos em manutenção */}
+      <Route 
+        path="/fotos" 
+        element={
+          <PrivateRoute>
+            <Layout>
+              <MaintenancePage />
+            </Layout>
+          </PrivateRoute>
+        } 
+      />
+      
+      {/* Rotas para resultados */}
+      <Route 
+        path="/resultados" 
+        element={
+          <PrivateRoute>
+            <Layout>
+              <Resultados />
+            </Layout>
+          </PrivateRoute>
+        } 
+      />
+      
+      <Route 
+        path="/resultado-fisico" 
+        element={
+          <PrivateRoute>
+            <Layout>
+              <ResultadoFisico />
+            </Layout>
           </PrivateRoute>
         } 
       />

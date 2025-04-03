@@ -16,20 +16,17 @@ export function Header({ onMenuClick, isMenuOpen }: HeaderProps) {
       <Link to="/dashboard" className="flex items-center">
         <img
           alt="Frango"
-          className="w-8 h-8 rounded-lg mr-3"
+          className="w-10 h-10 rounded-lg mr-3"
           src="/images/frango.png"
         />
-        <div className="flex items-center">
-          <span className="text-lg font-extrabold text-orange-500 tracking-wide">
-            EXTERMINA&nbsp;
-          </span>
-          <span className="text-lg font-extrabold text-orange-500 tracking-wide">
-            FRANGO
+        <div>
+          <span className="text-lg font-extrabold text-orange-500 whitespace-nowrap">
+            EXTERMINA FRANGO
           </span>
         </div>
       </Link>
 
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-3">
         <button
           className={`p-2 rounded-lg ${
             isDarkMode 

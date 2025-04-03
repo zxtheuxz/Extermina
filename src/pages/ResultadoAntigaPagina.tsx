@@ -9,6 +9,8 @@ import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { useTheme } from '../contexts/ThemeContext';
 import { extrairNomeExercicio, encontrarVideoDoExercicio } from '../utils/exercicios';
+import { BotaoMetodoTreino } from '../components/BotaoMetodoTreino';
+import { formatarMetodoPDF } from '../utils/metodosTreino';
 
 // Adicione estas classes ao seu arquivo de estilos globais ou como uma constante
 const themeStyles = {
@@ -258,16 +260,16 @@ export function Resultados() {
     }
     
     const conteudo = perfil.resultado_nutricional;
-    
+      
     if (!conteudo) {
       console.error('[gerarPDFNutricional] Conteúdo nutricional não disponível');
       alert('Não há resultado de avaliação nutricional disponível para gerar o PDF');
       return;
     }
-    
+
     try {
       console.log('[gerarPDFNutricional] Definindo estado...');
-      setGerandoNutricional(true);
+        setGerandoNutricional(true);
       
       console.log('[gerarPDFNutricional] Conteúdo encontrado, tamanho:', conteudo.length);
       
@@ -911,11 +913,11 @@ export function Resultados() {
         format: 'a4'
       });
       
-      // Definições de margens e dimensões
-      const margemEsquerda = 15;
-      const margemDireita = 15;
-      const margemSuperior = 30;
-      const margemInferior = 20;
+      // Definições de margens e dimensões - REDUZINDO MARGENS AINDA MAIS
+      const margemEsquerda = 5;
+      const margemDireita = 5;
+      const margemSuperior = 20;
+      const margemInferior = 10;
       const larguraUtil = doc.internal.pageSize.width - margemEsquerda - margemDireita;
       
       // Variáveis de controle de página e posição
@@ -1156,16 +1158,59 @@ export function Resultados() {
               doc.setFontSize(9);
               
               const nomeExercicio = `${exercicio.numero} - ${exercicio.nome}`;
-              const linhasNome = doc.splitTextToSize(nomeExercicio, colunaExercicio - 8);
-              const alturaNecessaria = Math.max(8, linhasNome.length * 4);
+              const metodoInfo = formatarMetodoPDF(exercicio.nome);
               
-              // Se o nome for muito longo, aumentar a altura da linha
+              // Calcular altura necessária considerando se há método
+              const linhasNome = doc.splitTextToSize(nomeExercicio, colunaExercicio - 8);
+              let alturaNecessaria = Math.max(8, linhasNome.length * 4);
+              
+              // Se tiver método, adiciona mais espaço para a descrição
+              if (metodoInfo) {
+                // Quebrar a descrição do método em múltiplas linhas
+                const linhasDescricao = doc.splitTextToSize(metodoInfo.descricao, colunaExercicio - 8);
+                // Adicionar altura para o título do método + descrição (4 por linha)
+                alturaNecessaria += 6 + (linhasDescricao.length * 3.5);
+              }
+              
+              // Se o nome for muito longo ou tiver método, aumentar a altura da linha
               if (alturaNecessaria > 8) {
                 doc.setFillColor(ehPar ? 240 : 255, ehPar ? 240 : 255, ehPar ? 240 : 255);
                 doc.rect(margemEsquerda, posicaoY, larguraUtil, alturaNecessaria, 'F');
               }
               
               doc.text(linhasNome, margemEsquerda + 4, posicaoY + 4);
+              
+              // Adicionar informação do método se existir
+              if (metodoInfo) {
+                // Posição para o título do método
+                const metodoTituloY = posicaoY + 4 + linhasNome.length * 4;
+                
+                // Fundo azul claro para destacar todo o método (título e descrição)
+                const linhasDescricao = doc.splitTextToSize(metodoInfo.descricao, colunaExercicio - 12);
+                const alturaMetodo = 6 + (linhasDescricao.length * 3.5);
+                
+                // Fundo azul claro para o bloco inteiro do método
+                doc.setFillColor(210, 230, 255); // Azul bem claro
+                doc.roundedRect(margemEsquerda + 4, metodoTituloY - 3, colunaExercicio - 8, alturaMetodo, 1, 1, 'F');
+                
+                // Título do método
+                doc.setTextColor(0, 51, 153); // Azul escuro
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8);
+                doc.text(`MÉTODO ${metodoInfo.metodoNome}:`, margemEsquerda + 7, metodoTituloY);
+                
+                // Descrição do método
+                doc.setTextColor(0, 51, 153); // Azul escuro
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(7);
+                doc.text(linhasDescricao, margemEsquerda + 7, metodoTituloY + 4);
+                
+                // Restaurar configurações de texto
+                doc.setTextColor(0, 0, 0);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(9);
+              }
+              
               doc.text(exercicio.series, margemEsquerda + colunaExercicio + colunaSeries/2, posicaoY + 4, { align: 'center' });
               doc.text(exercicio.repeticoes, margemEsquerda + colunaExercicio + colunaSeries + colunaReps/2, posicaoY + 4, { align: 'center' });
               
@@ -1181,11 +1226,18 @@ export function Resultados() {
                 doc.setFillColor(236, 72, 21); // Laranja vivo (mesmo do cabeçalho)
                 doc.roundedRect(btnX, btnY, btnWidth, btnHeight, 1, 1, 'F');
                 
-                // Texto "VER VÍDEO" no botão
+                // Texto VER VÍDEO - ajustando para ficar perfeitamente centralizado
                 doc.setTextColor(255, 255, 255);
                 doc.setFont('helvetica', 'bold');
-                doc.setFontSize(7);
-                doc.text('VER VÍDEO', btnX + btnWidth/2, btnY + btnHeight/2 + 1, { align: 'center' });
+                doc.setFontSize(8);
+                
+                // Método alternativo de centralização para maior precisão
+                const textoVideo = 'VER VÍDEO';
+                const larguraTexto = doc.getTextWidth(textoVideo);
+                const posXTexto = btnX + (btnWidth - larguraTexto) / 2;
+                const posYTexto = btnY + btnHeight / 2 + 1.5;
+                
+                doc.text(textoVideo, posXTexto, posYTexto);
                 
                 // Adicionar link ao botão
                 doc.link(btnX, btnY, btnWidth, btnHeight, { url: videoUrl });
@@ -1241,10 +1293,10 @@ export function Resultados() {
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(12);
           } else {
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(10);
-          }
-          
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(10);
+            }
+            
           doc.text(linhasTexto, margemEsquerda, posicaoY);
           posicaoY += alturaTexto + (ehTitulo ? 5 : 3);
         }
@@ -1275,7 +1327,7 @@ export function Resultados() {
       // Resetar o estado de geração
       console.log('[gerarPDFFisica] Finalizando, resetando estado...');
       setTimeout(() => {
-        setGerandoFisica(false);
+          setGerandoFisica(false);
       }, 1000);
     }
   };
@@ -1330,7 +1382,7 @@ export function Resultados() {
       (resultadosContainer as HTMLElement).style.opacity = '1';
     }
   }, [isDarkMode]);
-
+  
   // Adicionar estilos de scrollbar personalizados
   useEffect(() => {
     const style = document.createElement('style');
@@ -1410,11 +1462,11 @@ export function Resultados() {
     if (!conteudo) {
       return <div className="text-gray-500">Nenhum resultado disponível ainda.</div>;
     }
-    
+
     // Verificar se o conteúdo parece ser uma ficha de treino
     const pareceSerFichaDeTreino = conteudo.includes('TREINO A') || 
-                                   conteudo.includes('TREINO B') || 
-                                   conteudo.toLowerCase().includes('treino a') ||
+                                  conteudo.includes('TREINO B') || 
+                                  conteudo.toLowerCase().includes('treino a') ||
                                    conteudo.toLowerCase().includes('treino b') ||
                                    conteudo.includes('exercício') ||
                                    conteudo.includes('exercicio') ||
@@ -1463,12 +1515,12 @@ export function Resultados() {
           
           // Verificar se é uma linha com o tipo/calorias do plano
           if (linha.includes('kcal') && (linha.includes('Emagrecimento') || linha.includes('Ganho'))) {
-            console.log('[gerarPDFNutricional] Encontrada linha de calorias/objetivo:', linha);
+            console.log('Encontrada linha de calorias/objetivo:', linha);
             
             // Verificar e corrigir duplicações no título
             if (linha.toLowerCase().includes('planejamento alimentar planejamento alimentar') || 
                 linha.toLowerCase().includes('planejamento alimentar planejamneto alimentar')) {
-              console.log('[gerarPDFNutricional] Detectada duplicação no título:', linha);
+              console.log('Detectada duplicação no título:', linha);
               tituloGeral = linha.replace(/planejam[e|n]to\s+alimentar\s+planejam[e|n]to\s+alimentar/i, 'Planejamento Alimentar');
             } else {
               tituloGeral = linha;
@@ -1479,12 +1531,12 @@ export function Resultados() {
           // Verificar se é o título geral
           const matchTitulo = linha.match(regexTitulo);
           if (matchTitulo) {
-            console.log('[gerarPDFNutricional] Encontrado título:', linha);
+            console.log('Encontrado título:', linha);
             if (!tituloGeral) {
               // Verificar e corrigir duplicações no título
               if (linha.toLowerCase().includes('planejamento alimentar planejamento alimentar') || 
                   linha.toLowerCase().includes('planejamento alimentar planejamneto alimentar')) {
-                console.log('[gerarPDFNutricional] Detectada duplicação no título:', linha);
+                console.log('Detectada duplicação no título:', linha);
                 tituloGeral = linha.replace(/planejam[e|n]to\s+alimentar\s+planejam[e|n]to\s+alimentar/i, 'Planejamento Alimentar');
               } else {
                 tituloGeral = linha;
@@ -1660,254 +1712,145 @@ export function Resultados() {
           }
         }
         
-        // Adicionar o título do planejamento alimentar logo após o cabeçalho
-        doc.setFillColor(236, 72, 21); // Laranja
-        doc.rect(margemEsquerda, posicaoY, larguraUtil, 10, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(12);
-        doc.setTextColor(255, 255, 255); // Branco
-        doc.text('Planejamento Alimentar', doc.internal.pageSize.width / 2, posicaoY + 6, { align: 'center' });
-        posicaoY += 15;
-        
-        // Adicionar informações de calorias e objetivo em destaque
-        if (caloriasTexto || objetivoDieta) {
-          let infoText = '';
-          if (caloriasTexto) infoText += caloriasTexto;
-          if (caloriasTexto && objetivoDieta) infoText += ' - ';
-          if (objetivoDieta) infoText += objetivoDieta;
-          
-          doc.setFillColor(245, 245, 245); // Cinza claro
-          doc.rect(margemEsquerda, posicaoY, larguraUtil, 8, 'F');
-          doc.setFontSize(10);
-          doc.setTextColor(236, 72, 21); // Laranja
-          doc.setFont('helvetica', 'bold');
-          doc.text(infoText, doc.internal.pageSize.width / 2, posicaoY + 5, { align: 'center' });
-          posicaoY += 13;
-        }
-        
-        // Renderizar cada refeição como uma tabela
-        for (const refeicao of refeicoes) {
-          // Verificar se precisa de nova página
-          const alturaEstimadaRefeicao = 15 + (refeicao.alimentos.length * 15);
-          if (posicaoY + alturaEstimadaRefeicao > doc.internal.pageSize.height - margemInferior - 20) {
-            adicionarRodape(paginaAtual, paginaAtual + 1);
-            doc.addPage();
-            paginaAtual++;
-            adicionarCabecalho(paginaAtual);
-            posicaoY = margemSuperior + 5;
-          }
-          
-          // Título da refeição
-          doc.setFillColor(236, 72, 21); // Laranja vivo
-          doc.rect(margemEsquerda, posicaoY, larguraUtil, 8, 'F');
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(11);
-          doc.setTextColor(255, 255, 255);
-          doc.text(refeicao.nome, doc.internal.pageSize.width / 2, posicaoY + 5.5, { align: 'center' });
-          posicaoY += 12;
-          
-          // Cabeçalho da tabela
-          doc.setFillColor(245, 130, 32); // Laranja mais claro
-          doc.rect(margemEsquerda, posicaoY, larguraUtil / 2, 7, 'F');
-          doc.rect(margemEsquerda + larguraUtil / 2, posicaoY, larguraUtil / 2, 7, 'F');
-          
-          doc.setTextColor(255, 255, 255);
-          doc.setFontSize(10);
-          doc.text('Alimento', margemEsquerda + 5, posicaoY + 5);
-          doc.text('Porção', margemEsquerda + larguraUtil / 2 + 5, posicaoY + 5);
-          posicaoY += 7;
-          
-          // Conteúdo da tabela
-          for (let i = 0; i < refeicao.alimentos.length; i++) {
-            const alimento = refeicao.alimentos[i];
-            const ehPar = i % 2 === 0;
-            
-            // Fundo da linha
-            doc.setFillColor(ehPar ? 255 : 240, ehPar ? 255 : 240, ehPar ? 255 : 240);
-            doc.rect(margemEsquerda, posicaoY, larguraUtil, 7, 'F');
-            
-            // Texto da linha
-            doc.setTextColor(0, 0, 0);
-            doc.setFont('helvetica', 'normal');
-            doc.text(alimento.nome, margemEsquerda + 5, posicaoY + 5);
-            doc.text(alimento.porcao, margemEsquerda + larguraUtil / 2 + 5, posicaoY + 5);
-            posicaoY += 7;
-            
-            // Adicionar substituições se existirem
-            if (alimento.substituicoes && alimento.substituicoes.length > 0) {
-              // Fundo para substituições
-              doc.setFillColor(255, 240, 220); // Laranja bem claro
-              
-              // Calcular a altura total necessária para exibir todas as substituições
-              let alturaTotal = 8; // Altura para o título
-              
-              // Pré-calcular as linhas de texto para cada substituição
-              const todasAsLinhas = [];
-              for (const substituicao of alimento.substituicoes) {
-                const linhasSubst = doc.splitTextToSize('• ' + substituicao, larguraUtil - 10);
-                todasAsLinhas.push(linhasSubst);
-                alturaTotal += linhasSubst.length * 5;
-              }
-              
-              alturaTotal += 2; // Espaçamento final
-              
-              // Desenhar o retângulo de fundo com a altura correta
-              doc.rect(margemEsquerda, posicaoY, larguraUtil, alturaTotal, 'F');
-              
-              // Título das substituições
-              doc.setFont('helvetica', 'bold');
-              doc.setTextColor(236, 72, 21); // Cor laranja para o título
-              doc.text('Opções de Substituição:', margemEsquerda + 5, posicaoY + 5);
-              posicaoY += 8;
-              
-              // Listar cada substituição
-              doc.setFont('helvetica', 'normal');
-              doc.setTextColor(0, 0, 0);
-              
-              for (let j = 0; j < alimento.substituicoes.length; j++) {
-                doc.setFontSize(9);
-                // Usar as linhas pré-calculadas
-                const linhasSubst = todasAsLinhas[j];
-                doc.text(linhasSubst, margemEsquerda + 7, posicaoY);
-                posicaoY += linhasSubst.length * 5;
-              }
-              
-              posicaoY += 2;
-            }
-            
-            // Verificar se precisa de nova página para o próximo alimento
-            if (i < refeicao.alimentos.length - 1) {
-              const proximoAlimento = refeicao.alimentos[i + 1];
-              const temSubstituicoes = proximoAlimento.substituicoes && proximoAlimento.substituicoes.length > 0;
-              const alturaProximoItem = 7 + (temSubstituicoes ? (proximoAlimento.substituicoes.length * 5 + 10) : 0);
-              
-              if (posicaoY + alturaProximoItem > doc.internal.pageSize.height - margemInferior - 20) {
-                adicionarRodape(paginaAtual, paginaAtual + 1);
-                doc.addPage();
-                paginaAtual++;
-                adicionarCabecalho(paginaAtual);
-                posicaoY = margemSuperior + 5;
-              }
-            }
-          }
-          
-          // Adicionar observações se existirem
-          if (refeicao.observacoes) {
-            // Verificar se precisa de nova página
-            if (posicaoY + 15 > doc.internal.pageSize.height - margemInferior - 20) {
-              adicionarRodape(paginaAtual, paginaAtual + 1);
-              doc.addPage();
-              paginaAtual++;
-              adicionarCabecalho(paginaAtual);
-              posicaoY = margemSuperior + 5;
-            }
-            
-            doc.setFillColor(240, 240, 240);
-            doc.rect(margemEsquerda, posicaoY, larguraUtil, 7, 'F');
-            
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(9);
-            doc.setTextColor(0, 0, 0);
-            doc.text('Observações: ', margemEsquerda + 5, posicaoY + 5);
-            
-            const obsTexto = refeicao.observacoes;
-            doc.setFont('helvetica', 'normal');
-            const obsWidth = doc.getTextWidth('Observações: ');
-            const linhasObs = doc.splitTextToSize(obsTexto, larguraUtil - obsWidth - 10);
-            
-            if (linhasObs.length > 1) {
-              // Se tiver múltiplas linhas, adicionar em linhas separadas
-              posicaoY += 7;
-              doc.text(linhasObs, margemEsquerda + 5, posicaoY);
-              posicaoY += linhasObs.length * 5;
-            } else {
-              // Se for uma única linha, adicionar na mesma linha
-              doc.text(obsTexto, margemEsquerda + 5 + obsWidth, posicaoY + 5);
-              posicaoY += 7;
-            }
-          }
-          
-          posicaoY += 10; // Espaço após cada refeição
-        }
-        
-        // Adicionar Lista de Compras se existir
-        if (listaDeCompras.length > 0) {
-          // Verificar se precisa de nova página
-          const alturaEstimadaLista = 15 + Math.ceil(listaDeCompras.length / 2) * 7;
-          if (posicaoY + alturaEstimadaLista > doc.internal.pageSize.height - margemInferior - 20) {
-            adicionarRodape(paginaAtual, paginaAtual + 1);
-            doc.addPage();
-            paginaAtual++;
-            adicionarCabecalho(paginaAtual);
-            posicaoY = margemSuperior + 5;
-          }
-          
-          // Título da lista de compras
-          doc.setFillColor(236, 72, 21); // Laranja vivo
-          doc.rect(margemEsquerda, posicaoY, larguraUtil, 8, 'F');
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(11);
-          doc.setTextColor(255, 255, 255);
-          doc.text('Lista de Compras', doc.internal.pageSize.width / 2, posicaoY + 5.5, { align: 'center' });
-          posicaoY += 12;
-          
-          // Calcular quantos itens por coluna
-          const itensTotal = listaDeCompras.length;
-          const itensPorColuna = Math.ceil(itensTotal / 2);
-          const larguraColuna = larguraUtil / 2 - 5;
-          
-          // Desenhar itens em duas colunas
-          for (let i = 0; i < itensPorColuna; i++) {
-            const itemEsquerda = listaDeCompras[i];
-            const itemDireita = i + itensPorColuna < itensTotal ? listaDeCompras[i + itensPorColuna] : null;
-            
-            // Verificar se precisa de nova página
-            if (posicaoY + 7 > doc.internal.pageSize.height - margemInferior - 20) {
-              adicionarRodape(paginaAtual, paginaAtual + 1);
-              doc.addPage();
-              paginaAtual++;
-              adicionarCabecalho(paginaAtual);
-              posicaoY = margemSuperior + 5;
-            }
-            
-            // Fundo colorido alternado
-            const ehPar = i % 2 === 0;
-            if (ehPar) {
-              doc.setFillColor(245, 245, 245);
-              doc.rect(margemEsquerda, posicaoY, larguraUtil, 7, 'F');
-            }
-            
-            // Texto dos itens
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
-            doc.setTextColor(0, 0, 0);
-            
-            // Item da esquerda
-            doc.text('• ' + itemEsquerda, margemEsquerda + 5, posicaoY + 5);
-            
-            // Item da direita (se existir)
-            if (itemDireita) {
-              doc.text('• ' + itemDireita, margemEsquerda + larguraUtil / 2 + 5, posicaoY + 5);
-            }
-            
-            posicaoY += 7;
-          }
-        }
-        
-        // Importante: retornar um elemento React
+        // Renderizar o planejamento alimentar em uma interface moderna
         return (
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6 transition-all duration-300">
-            <div className="whitespace-pre-wrap">{conteudo}</div>
+          <div className="space-y-6">
+            {/* Título principal com informações de calorias e objetivo */}
+            {tituloGeral && (
+              <div className="bg-orange-500 text-white p-3 rounded-t-lg text-center font-bold text-lg">
+                {tituloGeral}
+              </div>
+            )}
+            
+            {/* Lista de refeições */}
+            <div className="space-y-6">
+              {refeicoes.map((refeicao, index) => (
+                <div 
+                  key={index} 
+                  className={`overflow-hidden rounded-xl shadow-lg border ${
+                    isDarkMode 
+                      ? 'border-orange-500/30 bg-slate-800/80' 
+                      : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  <div className="bg-orange-500 py-2 px-4 text-white font-bold text-center">
+                    {refeicao.nome}
+                  </div>
+                  
+                  {/* Layout desktop - tabela */}
+                  <div className="hidden md:block">
+                    <div className="grid grid-cols-2 bg-orange-500/80 font-bold text-white">
+                      <div className="p-3 text-left border-r border-orange-300">Alimento</div>
+                      <div className="p-3 text-left">Porção</div>
+                    </div>
+                    
+                    {refeicao.alimentos.map((alimento: any, alIndex: number) => (
+                      <div key={alIndex}>
+                        <div className={`grid grid-cols-2 ${
+                          alIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                        } border-t border-orange-500/20 ${
+                          isDarkMode ? 'text-black' : 'text-gray-800'
+                        }`}>
+                          <div className="p-3 border-r border-orange-500/20">{alimento.nome}</div>
+                          <div className="p-3">{alimento.porcao}</div>
+                        </div>
+                        
+                        {/* Substituições para desktop */}
+                        {alimento.substituicoes && alimento.substituicoes.length > 0 && (
+                          <div className="bg-orange-50 border-t border-orange-200 p-3 pl-8 grid grid-cols-1 gap-1">
+                            <div className="text-orange-600 font-semibold mb-1">
+                              Opções de substituição:
+                            </div>
+                            {alimento.substituicoes.map((sub: string, subIndex: number) => (
+                              <div key={subIndex} className="text-gray-700 pl-2 border-l-2 border-orange-200">
+                                {sub}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Layout mobile - lista */}
+                  <div className="md:hidden">
+                    {refeicao.alimentos.map((alimento: any, alIndex: number) => (
+                      <div 
+                        key={alIndex} 
+                        className={`
+                          ${alIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'} 
+                          border-t border-orange-500/20 p-3
+                          ${isDarkMode ? 'text-black' : 'text-gray-800'}
+                        `}
+                      >
+                        <div className="font-bold text-orange-500 text-sm">Alimento:</div>
+                        <div className="mb-2">{alimento.nome}</div>
+                        
+                        <div className="font-bold text-orange-500 text-sm">Porção:</div>
+                        <div className="mb-2">{alimento.porcao}</div>
+                        
+                        {/* Substituições para mobile */}
+                        {alimento.substituicoes && alimento.substituicoes.length > 0 && (
+                          <div className="mt-2">
+                            <div className="font-bold text-orange-500 text-sm">
+                              Opções de substituição:
+                            </div>
+                            <div className="bg-orange-50 rounded p-2 mt-1">
+                              {alimento.substituicoes.map((sub: string, subIndex: number) => (
+                                <div key={subIndex} className="text-gray-700 mb-1 last:mb-0">
+                                  {sub}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Observações */}
+                  {refeicao.observacoes && (
+                    <div className="bg-gray-100 p-3 border-t border-gray-200">
+                      <span className="font-semibold">Observações:</span> {refeicao.observacoes}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            {/* Lista de Compras */}
+            {listaDeCompras.length > 0 && (
+              <div className={`overflow-hidden rounded-xl shadow-lg border ${
+                isDarkMode 
+                  ? 'border-orange-500/30 bg-slate-800/80' 
+                  : 'border-gray-200 bg-white'
+              }`}>
+                <div className="bg-orange-500 py-2 px-4 text-white font-bold text-center">
+                  Lista de Compras
+                </div>
+                
+                <div className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {listaDeCompras.map((item, index) => (
+                      <div 
+                        key={index} 
+                        className={`p-2 rounded ${
+                          index % 2 === 0 ? 'bg-gray-50' : 'bg-white'
+                        } border border-gray-100`}
+                      >
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         );
       } catch (error) {
         console.error('Erro ao processar planejamento alimentar:', error);
         // Em caso de erro, retornar o conteúdo bruto
-        return (
-          <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6 transition-all duration-300">
-            <div className="whitespace-pre-wrap">{conteudo}</div>
-          </div>
-        );
+        return processarTextoSimples();
       }
     }
     // Se não for planejamento alimentar, verificar se é ficha de treino
@@ -1987,7 +1930,7 @@ export function Resultados() {
                 }
               }
               
-              // Verificar séries e repetições na próxima linha
+                // Verificar séries e repetições na próxima linha
               if (!series && i + 1 < linhas.length) {
                 const proximaLinha = linhas[i + 1].trim();
                 if (/^\d+x\s+\d+/.test(proximaLinha)) {
@@ -2050,18 +1993,21 @@ export function Resultados() {
                           <span className="mr-2 text-base flex-1">
                             <span className="font-medium">{exercicio.numero}</span> - {exercicio.nome}
                           </span>
-                          {videoUrl && (
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setVideoModalUrl(videoUrl);
-                              }}
-                              className="ml-1 px-2 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded-md flex items-center transition-colors flex-shrink-0"
-                            >
-                              <Play className="w-3 h-3 mr-1" /> VÍDEO
-                            </button>
-                          )}
+                          <div className="flex flex-col items-end gap-1">
+                            {videoUrl && (
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setVideoModalUrl(videoUrl);
+                                }}
+                                className="ml-1 px-2 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded-md flex items-center transition-colors flex-shrink-0"
+                              >
+                                <Play className="w-3 h-3 mr-1" />VER VÍDEO
+                              </button>
+                            )}
+                            <BotaoMetodoTreino nomeExercicio={exercicio.nome} />
+                          </div>
                         </div>
                         <div className="p-3 text-center border-r border-orange-500/20 text-base">{exercicio.series}</div>
                         <div className="p-3 text-center text-base">{exercicio.repeticoes}</div>
@@ -2077,38 +2023,38 @@ export function Resultados() {
                     const videoUrl = encontrarVideoDoExercicio(exercicio.nome, 'WEB');
                     
                     return (
-                      <div key={exIndex} className={`
-                        ${exIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'} 
-                        border-t border-orange-500/20 p-3
-                        ${isDarkMode ? 'text-black' : 'text-gray-800'}`}
-                      >
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="font-bold text-orange-500 text-sm">Exercício:</div>
-                          {videoUrl && (
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault(); 
-                                e.stopPropagation();
-                                setVideoModalUrl(videoUrl);
-                              }}
-                              className="ml-1 px-2 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded-md flex items-center transition-colors flex-shrink-0"
-                            >
-                              <Play className="w-3 h-3 mr-1" /> VÍDEO
-                            </button>
-                          )}
-                        </div>
-                        <div className="mb-2 text-sm">
-                          <span className="font-medium">{exercicio.numero}</span> - {exercicio.nome}
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <div className="font-bold text-orange-500 text-sm">Séries:</div>
-                            <div className="text-sm">{exercicio.series}</div>
+                      <div key={exIndex} className="bg-white dark:bg-gray-800 rounded-md shadow-sm mb-3 overflow-hidden">
+                        <div className="p-3 border-b border-orange-500/20">
+                          <div className="flex flex-col mb-2">
+                            <span className="font-medium text-gray-800 dark:text-white text-base mb-1">
+                              <span className="font-semibold">{exercicio.numero}</span> - {exercicio.nome}
+                            </span>
+                            <div className="flex flex-row gap-2 mt-1">
+                              {videoUrl && (
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setVideoModalUrl(videoUrl);
+                                  }}
+                                  className="px-2 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded-md flex items-center transition-colors"
+                                >
+                                  <Play className="w-3 h-3 mr-1" />VER VÍDEO
+                                </button>
+                              )}
+                              <BotaoMetodoTreino nomeExercicio={exercicio.nome} />
+                            </div>
                           </div>
-                          <div>
-                            <div className="font-bold text-orange-500 text-sm">Repetições:</div>
-                            <div className="text-sm">{exercicio.repeticoes}</div>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <div className="font-bold text-orange-500 text-sm">Séries:</div>
+                              <div className="text-sm text-gray-800 dark:text-gray-200">{exercicio.series}</div>
+                            </div>
+                            <div>
+                              <div className="font-bold text-orange-500 text-sm">Repetições:</div>
+                              <div className="text-sm text-gray-800 dark:text-gray-200">{exercicio.repeticoes}</div>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -2121,8 +2067,8 @@ export function Resultados() {
         );
       } catch (error) {
         console.error("Erro ao processar a ficha de treino:", error);
-        return processarTextoSimples();
-      }
+          return processarTextoSimples();
+        }
     }
     // Se não for nem planejamento alimentar nem ficha de treino
     else {
@@ -2131,11 +2077,11 @@ export function Resultados() {
     
     // Função interna para processar texto simples
     function processarTextoSimples() {
-      return (
+        return (
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-6 transition-all duration-300">
           <div className="whitespace-pre-wrap">{conteudo}</div>
-        </div>
-      );
+          </div>
+        );
     }
   };
 
@@ -2166,7 +2112,7 @@ export function Resultados() {
             {!carregando && perfilLiberado && (
               <>
                 {activeTab === 'fisica' ? (
-                  <button
+              <button
                     onClick={() => {
                       console.log('Clique no botão de geração de PDF Física');
                       try {
@@ -2179,20 +2125,20 @@ export function Resultados() {
                       }
                     }}
                     disabled={gerandoFisica}
-                    className="inline-flex items-center px-4 py-2 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-start sm:self-auto"
-                  >
+                className="inline-flex items-center px-4 py-2 text-sm font-medium bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-start sm:self-auto"
+              >
                     {gerandoFisica ? (
-                      <>
-                        <span className="animate-pulse mr-2">●</span>
-                        Gerando PDF...
-                      </>
-                    ) : (
-                      <>
-                        <Download className="h-4 w-4 mr-2" />
+                  <>
+                    <span className="animate-pulse mr-2">●</span>
+                    Gerando PDF...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
                         Baixar PDF Física
-                      </>
-                    )}
-                  </button>
+                  </>
+                )}
+              </button>
                 ) : (
                   <button
                     onClick={() => {

@@ -5,6 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Header } from './Header';
 import ThemeToggle from './ThemeToggle';
 import { pwaManager } from '../lib/pwaManager';
+import { MaintenancePage } from '../pages/MaintenancePage';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -17,6 +18,7 @@ export function Layout({ children }: LayoutProps) {
   const isDark = theme === 'dark';
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showInstallButton, setShowInstallButton] = useState(false);
+  const [showMaintenance, setShowMaintenance] = useState(false);
 
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
@@ -108,66 +110,94 @@ export function Layout({ children }: LayoutProps) {
       <aside 
         className={`${
           isMobileMenuOpen ? 'block' : 'hidden'
-        } md:block w-full md:w-64 ${isDark ? 'bg-gray-900' : 'bg-white'} border-r ${isDark ? 'border-gray-800' : 'border-gray-200'} flex flex-col z-10 ${
+        } md:block w-full md:w-72 lg:w-80 ${isDark ? 'bg-gray-900' : 'bg-white'} border-r ${isDark ? 'border-gray-800' : 'border-gray-200'} flex flex-col z-10 ${
           isMobileMenuOpen ? 'fixed inset-0 overflow-y-auto' : ''
         }`}
       >
         {/* Logo e título - visível apenas em desktop */}
-        <div className={`hidden md:block p-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
-          <div className="flex items-center gap-2">
+        <div className={`hidden md:block p-3 md:p-4 border-b ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
+          <div className="flex items-center space-x-2">
             <img
               src="/images/frango.png"
               alt="Frango"
-              className="w-10 h-10 rounded-lg mr-3"
+              className="w-8 h-8 md:w-10 md:h-10 rounded-lg flex-shrink-0"
             />
-            <span className="font-bold text-lg text-orange-500">
-              EXTERMINA FRANGO
-            </span>
+            <div className="min-w-0 flex-1">
+              <span className="font-bold text-base md:text-lg text-orange-500 block truncate">
+                EXTERMINA FRANGO
+              </span>
+            </div>
           </div>
         </div>
         
         {/* Botão para fechar o menu - visível apenas em mobile quando o menu está aberto */}
         {isMobileMenuOpen && (
-          <div className="md:hidden p-4 flex justify-end">
+          <div className="md:hidden p-3 flex justify-between items-center border-b border-gray-700">
+            <div className="flex items-center space-x-2 min-w-0">
+              <img
+                src="/images/frango.png"
+                alt="Frango"
+                className="w-7 h-7 rounded-lg flex-shrink-0"
+              />
+              <div className="min-w-0 flex-1">
+                <span className="font-bold text-sm text-orange-500 block truncate">
+                  EXTERMINA FRANGO
+                </span>
+              </div>
+            </div>
             <button 
               onClick={toggleMobileMenu}
-              className={`p-2 rounded-lg ${isDark ? 'text-gray-400' : 'text-gray-600'} hover:text-orange-500`}
+              className={`p-1.5 rounded-lg ${isDark ? 'text-gray-400' : 'text-gray-600'} hover:text-orange-500 flex-shrink-0`}
               aria-label="Fechar menu"
             >
-              <X className="h-6 w-6" />
+              <X className="h-5 w-5" />
             </button>
           </div>
         )}
         
         {/* Menu de navegação */}
-        <nav className="flex-1 py-4">
-          <Link to="/dashboard" className={`flex items-center gap-3 px-4 py-2 mx-2 rounded-lg ${isDark ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}>
-            <Home size={20} />
-            <span>Início</span>
+        <nav className="flex-1 p-3 md:p-4 space-y-1">
+          <Link to="/dashboard" className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm ${location.pathname === '/dashboard' ? 'bg-orange-500 text-white' : `${isDark ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}`}>
+            <Home size={18} className="flex-shrink-0" />
+            <span className="truncate">Início</span>
           </Link>
           
-          <Link to="/configuracoes" className={`flex items-center gap-3 px-4 py-2 mx-2 mt-1 rounded-lg ${isDark ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}>
-            <Settings size={20} />
-            <span>Configurações</span>
+          <Link to="/configuracoes" className={`flex items-center gap-3 px-4 py-3 rounded-lg ${location.pathname === '/configuracoes' ? 'bg-orange-500 text-white' : `${isDark ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}`}>
+            <Settings size={20} className="flex-shrink-0" />
+            <span className="truncate">Configurações</span>
           </Link>
           
           <button
             onClick={toggleTheme}
-            className={`flex items-center gap-3 px-4 py-2 mx-2 mt-1 rounded-lg w-full ${isDark ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full ${isDark ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}
           >
-            {isDark ? <Sun size={20} /> : <Moon size={20} />}
-            <span>{isDark ? 'Modo Claro' : 'Modo Escuro'}</span>
+            {isDark ? <Sun size={20} className="flex-shrink-0" /> : <Moon size={20} className="flex-shrink-0" />}
+            <span className="truncate">{isDark ? 'Modo Claro' : 'Modo Escuro'}</span>
+          </button>
+          
+          <button 
+            onClick={() => setShowMaintenance(true)}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full ${isDark ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+            <span className="truncate">Fotos</span>
           </button>
           
           {/* Botão de instalar app */}
           {showInstallButton && (
-            <button
-              onClick={handleInstallClick}
-              className="flex items-center gap-3 px-4 py-2 mx-2 mt-3 rounded-lg w-full bg-orange-500 hover:bg-orange-600 text-white"
-            >
-              <Download size={20} />
-              <span>Instalar App</span>
-            </button>
+            <div className="mt-4">
+              <button
+                onClick={handleInstallClick}
+                className="flex items-center justify-center gap-3 px-4 py-3 rounded-lg w-full bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                <Download size={20} className="flex-shrink-0" />
+                <span className="truncate">Instalar App</span>
+              </button>
+            </div>
           )}
         </nav>
         
@@ -175,17 +205,17 @@ export function Layout({ children }: LayoutProps) {
         <div className={`p-4 border-t ${isDark ? 'border-gray-800' : 'border-gray-200'}`}>
           <button 
             onClick={handleLogout}
-            className={`flex items-center gap-3 px-4 py-2 mx-2 rounded-lg w-full ${isDark ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full ${isDark ? 'text-gray-300 hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}
           >
-            <LogOut size={20} />
-            <span>Sair</span>
+            <LogOut size={20} className="flex-shrink-0" />
+            <span className="truncate">Sair</span>
           </button>
         </div>
       </aside>
       
       {/* Conteúdo principal */}
-      <main className="flex-grow">
-        {children}
+      <main className="flex-1 overflow-auto">
+        {showMaintenance ? <MaintenancePage /> : children}
       </main>
     </div>
   );

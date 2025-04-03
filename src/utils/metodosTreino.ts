@@ -30,7 +30,7 @@ export const metodosTreino: Record<string, MetodoTreino> = {
     nome: "PAUSA",
     descricao: "CONSISTE EM FAZER UMA PAUSA NA EXECUÇÃO, E MANTER ESSA POSIÇÃO POR UM TEMPO DETERMINADO, EM ALGUMA FASE DO MOVIMENTO QUE PODE SER NO INICIO OU NO FINAL DO MOVIMENTO. ENTÃO PODE APARECER ASSIM NO SEU TREINO, EXEMPLO: FAÇA UMA PAUSA EMBAIXO POR 2 SEGUNDOS."
   }
-};
+  };
 
 // Função para extrair o nome do método de treino de um texto
 export const extrairMetodoTreino = (texto: string): string | null => {

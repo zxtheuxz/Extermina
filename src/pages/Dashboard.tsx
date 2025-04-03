@@ -18,8 +18,8 @@ interface Perfil {
   sexo?: string;
   nome_completo?: string;
   liberado?: string; // 'sim' ou 'nao'
-  resultado_fisica?: string; // Texto com o resultado da avaliação física
-  resultado_nutricional?: string; // Texto com o resultado da avaliação nutricional
+  resultado_fisica?: string; // Texto com o resultado da programação física
+  resultado_nutricional?: string; // Texto com o resultado da programação nutricional
 }
 
 // Adicione essa interface para o evento beforeinstallprompt logo no início do arquivo, após as outras interfaces
@@ -36,7 +36,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
-  const [avaliacoes, setAvaliacoes] = useState({
+  const [programacoes, setProgramacoes] = useState({
     fisica: false,
     nutricional: false
   });
@@ -235,12 +235,12 @@ export function Dashboard() {
           console.log('Tem avaliação nutricional (com verificação direta):', temAvaliacaoNutricional);
 
           // Atualizar o estado das avaliações
-          setAvaliacoes({
+          setProgramacoes({
             fisica: temAvaliacaoFisica,
             nutricional: temAvaliacaoNutricional
           });
           
-          console.log('Avaliações definidas como:', { fisica: temAvaliacaoFisica, nutricional: temAvaliacaoNutricional });
+          console.log('Programações definidas como:', { fisica: temAvaliacaoFisica, nutricional: temAvaliacaoNutricional });
           
           // Verificar se ambos os formulários estão preenchidos para mostrar o aviso
           const ambosFormulariosPreenchidos = temAvaliacaoFisica && temAvaliacaoNutricional;
@@ -459,10 +459,10 @@ export function Dashboard() {
     
     if (perfil?.sexo?.toLowerCase() === 'feminino') {
       console.log('Redirecionando para formulário feminino');
-      return '/avaliacao-nutricional/feminino';
+      return '/programacao-nutricional/feminino';
     } else if (perfil?.sexo?.toLowerCase() === 'masculino') {
       console.log('Redirecionando para formulário masculino');
-      return '/avaliacao-nutricional/masculino';
+      return '/programacao-nutricional/masculino';
     } else {
       console.log('Sexo não definido, redirecionando para configurações');
       setError('Por favor, configure seu perfil com o sexo antes de prosseguir.');
@@ -528,10 +528,10 @@ export function Dashboard() {
                 <CheckCircle className={`h-16 w-16 ${isDarkMode ? 'text-green-400' : 'text-green-500'}`} />
               </div>
               <h2 className={`text-2xl md:text-3xl font-bold mb-4 text-center ${getThemeClass(isDarkMode, 'text')}`}>
-                Avaliação Nutricional Enviada com Sucesso!
+                Programação Nutricional Enviada com Sucesso!
               </h2>
               <p className={`${getThemeClass(isDarkMode, 'textSecondary')} text-center max-w-md mb-8 text-lg`}>
-                Sua avaliação foi recebida e está sendo analisada por nossos especialistas.
+                Sua programação foi recebida e está sendo analisada por nossos especialistas.
               </p>
               <button
                 onClick={() => navigate('/dashboard')}
@@ -548,13 +548,13 @@ export function Dashboard() {
                     Bem-vindo(a), {getNomeExibicao()}!
                   </h1>
                   <p className={`text-sm md:text-base ${getThemeClass(isDarkMode, 'textSecondary')}`}>
-                    Complete suas avaliações para receber seu plano personalizado.
+                    Complete suas programações para receber seu plano personalizado.
                   </p>
                 </div>
                 <div className="flex space-x-4 w-full md:w-auto justify-start">
-                  <Link to="/avaliacoes" className="pb-2 md:pb-4 px-1 text-sm md:text-base text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-500 font-medium flex items-center gap-2">
+                  <Link to="/programacoes" className="pb-2 md:pb-4 px-1 text-sm md:text-base text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-500 font-medium flex items-center gap-2">
                     <ClipboardList size={20} />
-                    <span>Avaliações</span>
+                    <span>Programações</span>
                   </Link>
                   <Link to="/resultados" className="pb-2 md:pb-4 px-1 text-sm md:text-base text-indigo-500/70 dark:text-indigo-400/70 hover:text-indigo-600 dark:hover:text-indigo-300 flex items-center gap-2">
                     <BarChart size={20} />
@@ -565,16 +565,16 @@ export function Dashboard() {
               
               {/* Aviso de formulários completos */}
               {mostrarAviso && (
-                <div className="mb-6 p-3 md:p-4 bg-indigo-900/30 border-l-4 border-indigo-500 rounded-lg flex flex-col md:flex-row md:items-start animate-slideIn">
-                  <div className="bg-indigo-500 rounded-full p-1 mr-3 mt-0.5 hidden md:block">
+                <div className={`mb-6 p-3 md:p-4 ${isDarkMode ? 'bg-indigo-900/30 border-indigo-500' : 'bg-indigo-100 border-indigo-600'} border-l-4 rounded-lg flex flex-col md:flex-row md:items-start animate-slideIn`}>
+                  <div className={`${isDarkMode ? 'bg-indigo-500' : 'bg-indigo-600'} rounded-full p-1 mr-3 mt-0.5 hidden md:block`}>
                     <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-base md:text-lg font-medium text-indigo-400">Parabéns!</h3>
-                    <p className="text-sm md:text-base text-indigo-200">
-                      Você completou todas as avaliações necessárias. Seus resultados e planos personalizados estão disponíveis na aba Resultados.
+                    <h3 className={`text-base md:text-lg font-medium ${isDarkMode ? 'text-indigo-400' : 'text-indigo-700'}`}>Parabéns!</h3>
+                    <p className={`text-sm md:text-base ${isDarkMode ? 'text-indigo-200' : 'text-indigo-900'}`}>
+                      Você completou todas as programações necessárias. Seus resultados e planos personalizados estão disponíveis na aba Resultados.
                     </p>
                     <div className="mt-3">
                       <button 
@@ -600,93 +600,93 @@ export function Dashboard() {
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-base md:text-lg font-medium text-yellow-400">Avaliações em análise</h3>
+                    <h3 className="text-base md:text-lg font-medium text-yellow-400">Programações em análise</h3>
                     <p className="text-sm md:text-base text-yellow-200">
-                      Você completou todas as avaliações necessárias. Seus resultados estão sendo analisados pela nossa equipe e estarão disponíveis em breve.
+                      Você completou todas as programações necessárias. Seus resultados estão sendo analisados pela nossa equipe e estarão disponíveis em breve.
                     </p>
                   </div>
                 </div>
               )}
               
-              {/* Cards de avaliação */}
+              {/* Cards de programação */}
               <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2">
-                <div className={`card overflow-hidden ${isDarkMode ? 'bg-slate-800' : 'bg-white'} rounded-xl shadow-lg`}>
+                <div className={`card overflow-hidden rounded-xl shadow-lg ${isDarkMode ? 'bg-purple-900/15 border-purple-900/20' : 'bg-purple-50 border-purple-100'} border`}>
                   <div className="p-6">
                     <div className="flex items-center mb-4">
                       <div className={`w-12 h-12 rounded-full bg-purple-600 flex items-center justify-center mr-4`}>
                         <Activity className="h-6 w-6 text-white" />
                       </div>
-                      <h2 className="text-xl font-bold text-theme">Avaliação Física</h2>
+                      <h2 className="text-xl font-bold text-theme">Programação Física</h2>
                     </div>
                     
                     <p className="text-theme-secondary mb-6">
-                      {avaliacoes.fisica 
+                      {programacoes.fisica 
                         ? (perfil?.liberado?.toLowerCase() === 'sim'
-                          ? "Você já completou sua avaliação física. Os resultados estão disponíveis na aba Resultados."
-                          : "Você já completou sua avaliação física. Os resultados estão sendo analisados pela nossa equipe.")
-                        : "Complete sua avaliação física para receber um plano de treino personalizado."}
+                          ? "Você já completou sua programação física. Os resultados estão disponíveis na aba Resultados."
+                          : "Você já completou sua programação física. Os resultados estão sendo analisados pela nossa equipe.")
+                        : "Complete sua programação física para receber um plano de treino personalizado."}
                     </p>
                     
                     <div className="flex">
                       <button 
-                        onClick={() => navigate(avaliacoes.fisica && perfil?.liberado?.toLowerCase() === 'sim' ? '/resultados' : '/avaliacao-fisica')}
+                        onClick={() => navigate(programacoes.fisica && perfil?.liberado?.toLowerCase() === 'sim' ? '/resultado-fisico' : '/programacao-fisica')}
                         className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          avaliacoes.fisica && perfil?.liberado?.toLowerCase() !== 'sim'
+                          programacoes.fisica && perfil?.liberado?.toLowerCase() !== 'sim'
                             ? 'bg-purple-400 cursor-not-allowed'
                             : 'bg-purple-600 hover:bg-purple-700'
                         } text-white`}
-                        disabled={avaliacoes.fisica && perfil?.liberado?.toLowerCase() !== 'sim'}
+                        disabled={programacoes.fisica && perfil?.liberado?.toLowerCase() !== 'sim'}
                       >
-                        {avaliacoes.fisica 
+                        {programacoes.fisica 
                           ? (perfil?.liberado?.toLowerCase() === 'sim' ? "Ver Resultados" : "Em análise") 
-                          : "Preencher Avaliação"}
+                          : "Preencher Programação"}
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </button>
                     </div>
                   </div>
                   
-                  <div className={`px-6 py-3 bg-purple-100/10 flex items-center text-sm`}>
+                  <div className={`px-6 py-3 ${isDarkMode ? 'bg-purple-900/25' : 'bg-purple-100/40'} flex items-center text-sm`}>
                     <Activity className="h-4 w-4 mr-2" />
                     <span>Análise corporal e medidas físicas</span>
                   </div>
                 </div>
 
-                <div className={`card overflow-hidden ${isDarkMode ? 'bg-slate-800' : 'bg-white'} rounded-xl shadow-lg`}>
+                <div className={`card overflow-hidden rounded-xl shadow-lg ${isDarkMode ? 'bg-orange-900/15 border-orange-900/20' : 'bg-orange-50 border-orange-100'} border`}>
                   <div className="p-6">
                     <div className="flex items-center mb-4">
                       <div className={`w-12 h-12 rounded-full bg-orange-500 flex items-center justify-center mr-4`}>
                         <Utensils className="h-6 w-6 text-white" />
                       </div>
-                      <h2 className="text-xl font-bold text-theme">Avaliação Nutricional</h2>
+                      <h2 className="text-xl font-bold text-theme">Programação Nutricional</h2>
                     </div>
                     
                     <p className="text-theme-secondary mb-6">
-                      {avaliacoes.nutricional 
+                      {programacoes.nutricional 
                         ? (perfil?.liberado?.toLowerCase() === 'sim'
-                          ? "Você já completou sua avaliação nutricional. Os resultados estão disponíveis na aba Resultados."
-                          : "Você já completou sua avaliação nutricional. Os resultados estão sendo analisados pela nossa equipe.")
-                        : "Complete sua avaliação nutricional para receber um plano alimentar personalizado."}
+                          ? "Você já completou sua programação nutricional. Os resultados estão disponíveis na aba Resultados."
+                          : "Você já completou sua programação nutricional. Os resultados estão sendo analisados pela nossa equipe.")
+                        : "Complete sua programação nutricional para receber um plano alimentar personalizado."}
                     </p>
                     
                     <div className="flex">
                       <button 
-                        onClick={() => navigate(avaliacoes.nutricional && perfil?.liberado?.toLowerCase() === 'sim' ? '/resultados' : getNutricionalLink())}
+                        onClick={() => navigate(programacoes.nutricional && perfil?.liberado?.toLowerCase() === 'sim' ? '/resultado-nutricional' : getNutricionalLink())}
                         className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          avaliacoes.nutricional && perfil?.liberado?.toLowerCase() !== 'sim'
+                          programacoes.nutricional && perfil?.liberado?.toLowerCase() !== 'sim'
                             ? 'bg-orange-400 cursor-not-allowed'
                             : 'bg-orange-500 hover:bg-orange-600'
                         } text-white`}
-                        disabled={avaliacoes.nutricional && perfil?.liberado?.toLowerCase() !== 'sim'}
+                        disabled={programacoes.nutricional && perfil?.liberado?.toLowerCase() !== 'sim'}
                       >
-                        {avaliacoes.nutricional 
+                        {programacoes.nutricional 
                           ? (perfil?.liberado?.toLowerCase() === 'sim' ? "Ver Resultados" : "Em análise") 
-                          : "Preencher Avaliação"}
+                          : "Preencher Programação"}
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </button>
                     </div>
                   </div>
                   
-                  <div className={`px-6 py-3 bg-orange-100/10 flex items-center text-sm`}>
+                  <div className={`px-6 py-3 ${isDarkMode ? 'bg-orange-900/25' : 'bg-orange-100/40'} flex items-center text-sm`}>
                     <Utensils className="h-4 w-4 mr-2" />
                     <span>Hábitos alimentares e objetivos nutricionais</span>
                   </div>
