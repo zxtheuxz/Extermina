@@ -88,6 +88,35 @@ const VideoModal = React.memo(({ videoUrl, onClose }: { videoUrl: string; onClos
   );
 });
 
+// Adicionar estilos customizados para scrollbar
+const addCustomScrollbarStyles = () => {
+  const style = document.createElement('style');
+  style.textContent = `
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.1);
+      border-radius: 3px;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(249, 115, 22, 0.5);
+      border-radius: 3px;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(249, 115, 22, 0.7);
+    }
+  `;
+  
+  if (!document.head.querySelector('style[data-custom-scrollbar]')) {
+    style.setAttribute('data-custom-scrollbar', 'true');
+    document.head.appendChild(style);
+  }
+};
+
 export function ResultadoNutricional() {
   const navigate = useNavigate();
   const [gerandoPDF, setGerandoPDF] = useState(false);
@@ -102,13 +131,136 @@ export function ResultadoNutricional() {
   const [error, setError] = useState<string | null>(null);
   const [videoModalUrl, setVideoModalUrl] = useState<string | null>(null);
   
+  // Adicionar estilos da scrollbar quando o componente monta
+  useEffect(() => {
+    addCustomScrollbarStyles();
+  }, []);
+  
   // Novos estados para mensagens de carregamento sequenciais
   const [mensagemCarregamento, setMensagemCarregamento] = useState<string>('Buscando informações do seu Perfil');
   const [primeiroCarregamento, setPrimeiroCarregamento] = useState<boolean>(true);
   
+  // Estados para navegação por seções
+  const [secaoSelecionada, setSecaoSelecionada] = useState<string>('completo');
+  const [secoesDisponiveis, setSecoesDisponiveis] = useState<string[]>([]);
+  
   // Obter o ID da query string
   const queryParams = new URLSearchParams(location.search);
   const id = queryParams.get('id');
+
+  // Função para extrair seções disponíveis do conteúdo
+  const extrairSecoesDisponiveis = (conteudo: string) => {
+    const secoes = [];
+    const linhas = conteudo.split('\n').filter(linha => linha.trim().length > 0);
+    
+    const regexRefeicao = /^(Café da manhã|Colação|Almoço|Lanche da Tarde|Lanche da Tarde Substituto|Jantar|Ceia)\s*$/i;
+    const regexListaCompras = /^Lista de compras\s*$/i;
+    
+    for (const linha of linhas) {
+      const matchRefeicao = linha.match(regexRefeicao);
+      const matchListaCompras = linha.match(regexListaCompras);
+      
+      if (matchRefeicao) {
+        let nomeSecao = matchRefeicao[1];
+        // Unificar "Lanche da Tarde Substituto" com "Lanche da Tarde"
+        if (nomeSecao.toLowerCase().includes('lanche da tarde')) {
+          nomeSecao = 'Lanche da Tarde';
+        }
+        if (!secoes.includes(nomeSecao)) {
+          secoes.push(nomeSecao);
+        }
+      } else if (matchListaCompras) {
+        if (!secoes.includes('Lista de Compras')) {
+          secoes.push('Lista de Compras');
+        }
+      }
+    }
+    
+    return secoes;
+  };
+
+  // Função para filtrar conteúdo por seção
+  const filtrarConteudoPorSecao = (conteudo: string, secao: string) => {
+    if (secao === 'completo') return conteudo;
+    
+    const linhas = conteudo.split('\n');
+    const linhasFiltradas = [];
+    let capturandoSecao = false;
+    let tituloGeral = '';
+    
+    // Primeiro, capturar o título geral
+    for (const linha of linhas) {
+      if (linha.includes('kcal') && (linha.includes('Emagrecimento') || linha.includes('Ganho'))) {
+        tituloGeral = linha;
+        break;
+      }
+      if (linha.includes('Planejamento alimentar') || linha.includes('Planejamneto alimentar')) {
+        tituloGeral = linha;
+        break;
+      }
+    }
+    
+    // Adicionar título geral se existir
+    if (tituloGeral) {
+      linhasFiltradas.push(tituloGeral);
+      linhasFiltradas.push(''); // Linha em branco
+    }
+    
+    const regexRefeicao = /^(Café da manhã|Colação|Almoço|Lanche da Tarde|Lanche da Tarde Substituto|Jantar|Ceia)\s*$/i;
+    const regexListaCompras = /^Lista de compras\s*$/i;
+    
+    for (let i = 0; i < linhas.length; i++) {
+      const linha = linhas[i].trim();
+      
+      // Verificar se é o início da seção desejada
+      const matchRefeicao = linha.match(regexRefeicao);
+      const matchListaCompras = linha.match(regexListaCompras);
+      
+      if (matchRefeicao) {
+        let nomeSecaoAtual = matchRefeicao[1];
+        if (nomeSecaoAtual.toLowerCase().includes('lanche da tarde')) {
+          nomeSecaoAtual = 'Lanche da Tarde';
+        }
+        
+        if (nomeSecaoAtual === secao) {
+          capturandoSecao = true;
+          linhasFiltradas.push(linha);
+        } else {
+          capturandoSecao = false;
+        }
+      } else if (matchListaCompras && secao === 'Lista de Compras') {
+        capturandoSecao = true;
+        linhasFiltradas.push(linha);
+      } else if (capturandoSecao) {
+        // Verificar se chegamos a uma nova seção
+        const proximaRefeicao = linha.match(regexRefeicao);
+        const proximaListaCompras = linha.match(regexListaCompras);
+        
+        if (proximaRefeicao || proximaListaCompras) {
+          // Se chegamos a uma nova seção diferente da atual, parar de capturar
+          let nomeProximaSecao = '';
+          if (proximaRefeicao) {
+            nomeProximaSecao = proximaRefeicao[1];
+            if (nomeProximaSecao.toLowerCase().includes('lanche da tarde')) {
+              nomeProximaSecao = 'Lanche da Tarde';
+            }
+          } else if (proximaListaCompras) {
+            nomeProximaSecao = 'Lista de Compras';
+          }
+          
+          if (nomeProximaSecao !== secao) {
+            capturandoSecao = false;
+          } else {
+            linhasFiltradas.push(linha);
+          }
+        } else {
+          linhasFiltradas.push(linha);
+        }
+      }
+    }
+    
+    return linhasFiltradas.join('\n');
+  };
 
   // Atualize o estilo da scrollbar dinamicamente
   useEffect(() => {
@@ -359,6 +511,14 @@ export function ResultadoNutricional() {
 
     buscarPerfil();
   }, [id]);
+
+  // Extrair seções disponíveis quando o perfil for carregado
+  useEffect(() => {
+    if (perfil?.resultado_nutricional) {
+      const secoes = extrairSecoesDisponiveis(perfil.resultado_nutricional);
+      setSecoesDisponiveis(secoes);
+    }
+  }, [perfil?.resultado_nutricional]);
 
   // Função para gerar PDF da avaliação nutricional
   const gerarPDF = async () => {
@@ -1450,114 +1610,203 @@ export function ResultadoNutricional() {
         <VideoModal videoUrl={videoModalUrl} onClose={() => setVideoModalUrl(null)} />
       )}
       
-      <div className="max-w-5xl mx-auto px-4 py-6">
-        {/* Cabeçalho simplificado no estilo da imagem */}
-        <div className="mb-6">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="mb-4 p-1.5 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/20 rounded-full transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          
-          <h1 className="text-2xl font-bold">
-            <div className="text-orange-600">Programação Nutricional</div>
-          </h1>
-          <div className="h-1 w-32 bg-orange-600 mt-2 mb-4 rounded-full"></div>
-          
-          <p className="text-gray-600 dark:text-gray-300 text-sm mb-4">
-            Confira sua programação nutricional personalizada e comece a transformar sua saúde hoje mesmo.
-          </p>
+      {/* Layout Responsivo */}
+      <div className="lg:flex lg:h-screen">
+        {/* Layout Desktop - Split Screen */}
+        <div className="hidden lg:block lg:w-1/2 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 p-6 border-r border-gray-200 dark:border-gray-700 flex flex-col h-screen">
+          <div className="flex-1 flex flex-col">
+            {/* Cabeçalho Desktop */}
+            <div className="mb-4">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="mb-3 p-2 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/20 rounded-full transition-colors"
+              >
+                <ArrowLeft className="w-6 h-6" />
+              </button>
+              
+              <div className="flex items-center justify-between mb-1">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Programação Nutricional
+                </h1>
+              </div>
+              <div className="h-1 w-24 bg-orange-600 mb-3 rounded-full"></div>
+              
+              <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
+                Confira sua programação nutricional personalizada e comece a transformar sua saúde hoje mesmo.
+              </p>
+            </div>
 
-          {/* Informações do Cliente */}
-          {dadosCliente && (
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-orange-100 dark:border-orange-900">
-              <h3 className="text-sm font-semibold text-orange-500 mb-3">
-                Seus Dados
-              </h3>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="flex flex-col">
-                  <span className="text-xs text-gray-500">Peso Atual</span>
-                  <span className="text-sm font-medium text-gray-900">
-                    {dadosCliente.peso} kg
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-xs text-gray-500">Altura</span>
-                  <span className="text-sm font-medium text-gray-900">
-                    {dadosCliente.altura} cm
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-xs text-gray-500">Peso Habitual</span>
-                  <span className="text-sm font-medium text-gray-900">
-                    {dadosCliente.peso_habitual} kg
-                  </span>
+            {/* Seus Dados Desktop */}
+            {dadosCliente && (
+              <div className="mb-4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-semibold text-orange-700 dark:text-orange-400 mb-3">Seus Dados</h3>
+                <div className="grid grid-cols-1 gap-3 text-sm">
+                  <div className="flex flex-col">
+                    <span className="text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1 text-xs">
+                      Peso Atual
+                    </span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {dadosCliente.peso} kg
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-col">
+                    <span className="text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1 text-xs">
+                      Altura
+                    </span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {dadosCliente.altura} cm
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-col">
+                    <span className="text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1 text-xs">
+                      Peso Habitual
+                    </span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {dadosCliente.peso_habitual} kg
+                    </span>
+                  </div>
                 </div>
               </div>
+            )}
+
+            {/* Botões de Ação Desktop */}
+            <div className="mb-4 space-y-2">
+              <button
+                onClick={() => navigate('/resultado-fisico')}
+                className="w-full flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white shadow-sm hover:shadow transition-all"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Ver Programação Física
+              </button>
+
+              <button
+                onClick={() => {
+                  console.log("Botão 'Baixar PDF' clicado");
+                  gerarPDF();
+                }}
+                disabled={gerandoPDF || !perfil?.resultado_nutricional || carregando}
+                className={`
+                  w-full flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-medium transition-all
+                  ${gerandoPDF || !perfil?.resultado_nutricional || carregando
+                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
+                    : 'bg-orange-600 hover:bg-orange-700 text-white shadow-sm hover:shadow'}
+                `}
+              >
+                {gerandoPDF ? 
+                  'Gerando PDF...' : 
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    Baixar PDF
+                  </>
+                }
+              </button>
             </div>
-          )}
+
+            {/* Navegação por Seções Desktop */}
+            {!carregando && perfilLiberado && perfil?.resultado_nutricional && secoesDisponiveis.length > 0 && (
+              <div className="flex-1 flex flex-col">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-orange-200 dark:border-orange-700 p-4 mb-4">
+                  <h4 className="text-sm font-semibold text-orange-700 dark:text-orange-400 mb-3 flex items-center">
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    Seções Disponíveis
+                  </h4>
+                  
+                  <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                    {/* Botão Ver Completo */}
+                    <div 
+                      className={`
+                        flex items-center p-2 rounded-md cursor-pointer transition-all duration-200 border-l-4
+                        ${secaoSelecionada === 'completo' ? 
+                          'bg-orange-50 dark:bg-orange-900/20 border-orange-500 text-orange-700 dark:text-orange-300' : 
+                          'bg-gray-50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-orange-50 dark:hover:bg-orange-900/10 hover:border-orange-400'
+                        }
+                      `}
+                      onClick={() => setSecaoSelecionada('completo')}
+                    >
+                      <div className="flex items-center">
+                        <span className="text-lg mr-3">📋</span>
+                        <span className="text-sm font-medium">Ver Completo</span>
+                      </div>
+                    </div>
+                    
+                    {/* Botões das Seções */}
+                    {secoesDisponiveis.map((secao) => {
+                      const icones: { [key: string]: string } = {
+                        'Café da manhã': '☕',
+                        'Colação': '🍎',
+                        'Almoço': '🍽️',
+                        'Lanche da Tarde': '🥪',
+                        'Jantar': '🍛',
+                        'Ceia': '🥛',
+                        'Lista de Compras': '🛒'
+                      };
+                      
+                      return (
+                        <div 
+                          key={secao}
+                          className={`
+                            flex items-center p-2 rounded-md cursor-pointer transition-all duration-200 border-l-4
+                            ${secaoSelecionada === secao ? 
+                              'bg-orange-50 dark:bg-orange-900/20 border-orange-500 text-orange-700 dark:text-orange-300' : 
+                              'bg-gray-50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-orange-50 dark:hover:bg-orange-900/10 hover:border-orange-400'
+                            }
+                          `}
+                          onClick={() => setSecaoSelecionada(secao)}
+                        >
+                          <div className="flex items-center">
+                            <span className="text-lg mr-3">{icones[secao] || '🍴'}</span>
+                            <span className="text-sm font-medium">{secao}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Dica Importante - só mostra se não tiver seções ou não estiver carregado */}
+            {(!perfil?.resultado_nutricional || secoesDisponiveis.length === 0) && (
+              <div className="flex-1 flex flex-col justify-center">
+                <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border border-orange-200 dark:border-orange-800">
+                  <div className="flex items-center mb-2">
+                    <svg className="w-5 h-5 text-orange-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h4 className="font-semibold text-orange-800 dark:text-orange-200">Dica Importante</h4>
+                  </div>
+                  <p className="text-sm text-orange-700 dark:text-orange-300">
+                    Siga sua programação nutricional com consistência. Pequenas mudanças diárias geram grandes resultados!
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Conteúdo principal */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-orange-100 dark:border-orange-900">
-          {/* Cabeçalho do cartão com posicionamento atualizado */}
-          <div className="relative border-b border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
-            <div className="flex flex-col space-y-4">
-              <div className="flex items-center">
-                <div className="w-1 h-6 bg-orange-600 rounded-full mr-3"></div>
-                <h2 className="text-base font-medium text-gray-800 dark:text-white">
-                  Sua programação nutricional
-                </h2>
-              </div>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                <button
-                  onClick={() => navigate('/resultado-fisico')}
-                  className="flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white shadow-sm hover:shadow transition-all"
-                >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  <span className="whitespace-nowrap">Ver Programação Física</span>
-                </button>
-                <button
-                  onClick={() => {
-                    console.log("Botão 'Baixar PDF' clicado");
-                    gerarPDF();
-                  }}
-                  disabled={gerandoPDF || !perfil?.resultado_nutricional || carregando}
-                  className={`
-                    flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium 
-                    ${gerandoPDF || !perfil?.resultado_nutricional || carregando
-                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
-                      : 'bg-orange-600 hover:bg-orange-700 text-white shadow-sm hover:shadow transition-all'}
-                  `}
-                >
-                  {gerandoPDF ? 
-                    'Gerando PDF...' : 
-                    <>
-                      <Download className="w-4 h-4 mr-2" />
-                      <span className="whitespace-nowrap">Baixar PDF</span>
-                    </>
-                  }
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          {/* Corpo do cartão */}
-          <div className="p-0">
+        {/* Lado Direito Desktop */}
+        <div className="hidden lg:block lg:w-1/2 bg-white dark:bg-gray-900 overflow-y-auto">
+          <div className="p-8">
             {carregando ? (
               <TelaCarregamento />
             ) : !perfilLiberado ? (
-              <div className="bg-yellow-50 dark:bg-gray-700 border-l-4 border-yellow-400 p-4 m-4 rounded">
+              <div className="bg-yellow-50 dark:bg-gray-700 border-l-4 border-yellow-400 p-6 rounded-lg">
                 <div className="flex">
                   <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                    <svg className="h-6 w-6 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                     </svg>
                   </div>
                   <div className="ml-3">
+                    <h3 className="text-lg font-medium text-yellow-800 dark:text-yellow-200 mb-2">
+                      Acesso Pendente
+                    </h3>
                     <p className="text-sm text-yellow-700 dark:text-yellow-200">
                       Seu acesso aos resultados ainda não foi liberado. Entre em contato com o administrador.
                     </p>
@@ -1565,24 +1814,31 @@ export function ResultadoNutricional() {
                 </div>
               </div>
             ) : perfil?.resultado_nutricional ? (
-              <div className="custom-scrollbar overflow-y-auto max-h-[70vh]">
-                {renderizarResultado(perfil.resultado_nutricional)}
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">
+                  {secaoSelecionada === 'completo' 
+                    ? 'Sua Programação Nutricional Completa'
+                    : `${secaoSelecionada}`
+                  }
+                </h2>
+                
+                <div className="custom-scrollbar">
+                  {renderizarResultado(filtrarConteudoPorSecao(perfil.resultado_nutricional, secaoSelecionada))}
+                </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-12 px-4">
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-md w-full text-center shadow-lg border border-orange-100 dark:border-orange-900 relative overflow-hidden">
-                  {/* Efeito de gradiente decorativo no topo */}
-                  <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-orange-400 via-orange-600 to-orange-800"></div>
-                  
+              <div className="flex flex-col items-center justify-center py-24">
+                <div className="text-center max-w-md">
                   <div className="relative bg-orange-100 dark:bg-orange-900/30 w-24 h-24 rounded-full mx-auto mb-6 flex items-center justify-center">
-                    <svg className="w-12 h-12 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <svg className="w-12 h-12 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
-                    {/* Animação de pulso */}
                     <span className="absolute w-full h-full rounded-full bg-orange-200 dark:bg-orange-800/40 animate-ping opacity-30"></span>
                   </div>
                   
-                  <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">Resultado em Processamento</h2>
+                  <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">
+                    Resultado em Processamento
+                  </h2>
                   
                   <p className="text-gray-600 dark:text-gray-300 mb-6">
                     A programação nutricional está sendo elaborada pela nossa equipe de especialistas.
@@ -1600,6 +1856,239 @@ export function ResultadoNutricional() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Layout Mobile - Rolável */}
+        <div className="lg:hidden min-h-screen bg-gray-50 dark:bg-gray-900">
+          <div className="max-w-5xl mx-auto px-4 py-6">
+            {/* Cabeçalho Mobile */}
+            <div className="mb-6">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="mb-4 p-1.5 text-orange-600 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/20 rounded-full transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              
+              <h1 className="text-2xl font-bold">
+                <div className="text-orange-600">Programação Nutricional</div>
+              </h1>
+              <div className="h-1 w-32 bg-orange-600 mt-2 mb-4 rounded-full"></div>
+              
+              <p className="text-gray-600 dark:text-gray-300 text-sm">
+                Confira sua programação nutricional personalizada e comece a transformar sua saúde hoje mesmo.
+              </p>
+            </div>
+
+            {/* Seus Dados Mobile */}
+            {dadosCliente && (
+              <div className="mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-semibold text-orange-700 dark:text-orange-400 mb-4">Seus Dados</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      Peso Atual
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                      {dadosCliente.peso} kg
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      Altura
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                      {dadosCliente.altura} cm
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      Peso Habitual
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                      {dadosCliente.peso_habitual} kg
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Conteúdo principal Mobile */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-orange-100 dark:border-orange-900">
+              <div className="relative border-b border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
+                <div className="flex flex-col space-y-4">
+                  <div className="flex items-center">
+                    <div className="w-1 h-6 bg-orange-600 rounded-full mr-3"></div>
+                    <h2 className="text-base font-medium text-gray-800 dark:text-white">
+                      Sua programação nutricional
+                    </h2>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <button
+                      onClick={() => navigate('/resultado-fisico')}
+                      className="flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white shadow-sm hover:shadow transition-all"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Ver Programação Física
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        console.log("Botão 'Baixar PDF' clicado");
+                        gerarPDF();
+                      }}
+                      disabled={gerandoPDF || !perfil?.resultado_nutricional || carregando}
+                      className={`
+                        flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium 
+                        ${gerandoPDF || !perfil?.resultado_nutricional || carregando
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
+                          : 'bg-orange-600 hover:bg-orange-700 text-white shadow-sm hover:shadow transition-all'}
+                      `}
+                    >
+                      {gerandoPDF ? 
+                        'Gerando PDF...' : 
+                        <>
+                          <Download className="w-4 h-4 mr-2" />
+                          Baixar PDF
+                        </>
+                      }
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-0">
+                {carregando ? (
+                  <TelaCarregamento />
+                ) : !perfilLiberado ? (
+                  <div className="bg-yellow-50 dark:bg-gray-700 border-l-4 border-yellow-400 p-4 m-4 rounded">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-yellow-700 dark:text-yellow-200">
+                          Seu acesso aos resultados ainda não foi liberado. Entre em contato com o administrador.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : perfil?.resultado_nutricional ? (
+                  <div className="custom-scrollbar overflow-y-auto">
+                    {/* Navegação por Seções Mobile */}
+                    {!carregando && perfilLiberado && perfil?.resultado_nutricional && secoesDisponiveis.length > 0 && (
+                      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                        <h4 className="text-sm font-semibold text-orange-700 dark:text-orange-400 mb-3 flex items-center">
+                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                          </svg>
+                          Seções Disponíveis
+                        </h4>
+                        
+                        <div className="space-y-2">
+                          {/* Botão Ver Completo Mobile */}
+                          <div 
+                            className={`
+                              flex items-center p-3 rounded-lg cursor-pointer transition-all duration-200 border-l-4
+                              ${secaoSelecionada === 'completo' ? 
+                                'bg-orange-50 dark:bg-orange-900/20 border-orange-500 text-orange-700 dark:text-orange-300' : 
+                                'bg-gray-50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-orange-50 dark:hover:bg-orange-900/10 hover:border-orange-400'
+                              }
+                            `}
+                            onClick={() => setSecaoSelecionada('completo')}
+                          >
+                            <span className="text-xl mr-3">📋</span>
+                            <span className="text-sm font-medium">Ver Completo</span>
+                          </div>
+                          
+                          {/* Lista de Seções Mobile */}
+                          <div className="grid grid-cols-1 gap-2">
+                            {secoesDisponiveis.map((secao) => {
+                              const icones: { [key: string]: string } = {
+                                'Café da manhã': '☕',
+                                'Colação': '🍎',
+                                'Almoço': '🍽️',
+                                'Lanche da Tarde': '🥪',
+                                'Jantar': '🍛',
+                                'Ceia': '🥛',
+                                'Lista de Compras': '🛒'
+                              };
+                              
+                              return (
+                                <div 
+                                  key={secao}
+                                  className={`
+                                    flex items-center p-3 rounded-lg cursor-pointer transition-all duration-200 border-l-4
+                                    ${secaoSelecionada === secao ? 
+                                      'bg-orange-50 dark:bg-orange-900/20 border-orange-500 text-orange-700 dark:text-orange-300' : 
+                                      'bg-gray-50 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-orange-50 dark:hover:bg-orange-900/10 hover:border-orange-400'
+                                    }
+                                  `}
+                                  onClick={() => setSecaoSelecionada(secao)}
+                                >
+                                  <span className="text-xl mr-3">{icones[secao] || '🍴'}</span>
+                                  <span className="text-sm font-medium">{secao}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Conteúdo Nutricional Mobile */}
+                    <div className="p-4">
+                      <div className="mb-4">
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-white">
+                          {secaoSelecionada === 'completo' 
+                            ? 'Programação Nutricional Completa'
+                            : `${secaoSelecionada}`
+                          }
+                        </h3>
+                      </div>
+                      {renderizarResultado(filtrarConteudoPorSecao(perfil.resultado_nutricional, secaoSelecionada))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 px-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-md w-full text-center shadow-lg border border-orange-100 dark:border-orange-900 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-orange-400 via-orange-600 to-orange-800"></div>
+                      
+                      <div className="relative bg-orange-100 dark:bg-orange-900/30 w-24 h-24 rounded-full mx-auto mb-6 flex items-center justify-center">
+                        <svg className="w-12 h-12 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span className="absolute w-full h-full rounded-full bg-orange-200 dark:bg-orange-800/40 animate-ping opacity-30"></span>
+                      </div>
+                      
+                      <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">Resultado em Processamento</h2>
+                      
+                      <p className="text-gray-600 dark:text-gray-300 mb-6">
+                        A programação nutricional está sendo elaborada pela nossa equipe de especialistas.
+                      </p>
+                      
+                      <div className="flex justify-center space-x-2 mb-4">
+                        <span className="w-3 h-3 rounded-full bg-orange-600 animate-bounce"></span>
+                        <span className="w-3 h-3 rounded-full bg-orange-600 animate-bounce delay-75"></span>
+                        <span className="w-3 h-3 rounded-full bg-orange-600 animate-bounce delay-150"></span>
+                      </div>
+                      
+                      <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                        Você receberá uma notificação assim que estiver disponível.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

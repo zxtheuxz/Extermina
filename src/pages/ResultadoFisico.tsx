@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { jsPDF } from 'jspdf';
-import { Play, Download, ArrowLeft } from 'lucide-react';
+import { Play, Download, ArrowLeft, BarChart3, Filter, TrendingUp, Calendar, Activity, Target } from 'lucide-react';
 import BotaoMetodoTreino from '../components/BotaoMetodoTreino';
 import { encontrarVideoDoExercicio as encontrarVideoUtils } from '../utils/exercicios';
 import { formatarMetodoPDF, encontrarMetodoTreino } from '../utils/metodosTreino';
@@ -29,6 +29,9 @@ interface Exercicio {
   nome: string;
   series: string;
   repeticoes: string;
+  grupoMuscular?: string;
+  volume?: number;
+  intensidade?: 'baixa' | 'media' | 'alta';
 }
 
 interface Treino {
@@ -36,6 +39,16 @@ interface Treino {
   descricao: string;
   titulo: string;
   exercicios: Exercicio[];
+  mes?: number;
+  semana?: number;
+}
+
+interface TreinoPorMes {
+  mes: number;
+  treinos: Treino[];
+  volumeTotal: number;
+  intensidadeMedia: string;
+  frequenciaSemanal: number;
 }
 
 interface Perfil {
@@ -51,6 +64,9 @@ interface DadosFisicos {
   experiencia_musculacao?: string;
   disponibilidade_semanal?: number | string;
 }
+
+type OrdenacaoTipo = 'padrao' | 'alfabetica' | 'volume' | 'intensidade';
+type FiltroGrupoMuscular = '' | 'peito' | 'costas' | 'pernas' | 'ombros' | 'bracos' | 'core';
 
 // Componente para exibir o modal de vídeo (memoizado)
 const VideoModal = React.memo(({ videoUrl, onClose }: { videoUrl: string; onClose: () => void }) => {
@@ -130,6 +146,18 @@ export function ResultadoFisico() {
   // Adicionar o novo estado
   const [dadosFisicos, setDadosFisicos] = useState<DadosFisicos | null>(null);
   
+  // Novos estados para as funcionalidades melhoradas
+  const [mesSelecionado, setMesSelecionado] = useState(1);
+  const [mostrarComparacao, setMostrarComparacao] = useState(false);
+  const [filtroGrupoMuscular, setFiltroGrupoMuscular] = useState<FiltroGrupoMuscular>('');
+  const [ordenacao, setOrdenacao] = useState<OrdenacaoTipo>('padrao');
+  const [treinosPorMes, setTreinosPorMes] = useState<TreinoPorMes[]>([]);
+  const [visualizacao, setVisualizacao] = useState<'lista' | 'cards'>('cards');
+  
+  // Estados para controlar as animações de ajuda
+  const [mostrarAnimacoesMeses, setMostrarAnimacoesMeses] = useState(true);
+  const [mostrarAnimacaoNutricional, setMostrarAnimacaoNutricional] = useState(true);
+  
   // Obter o ID da query string
   const queryParams = new URLSearchParams(location.search);
   const id = queryParams.get('id');
@@ -140,6 +168,172 @@ export function ResultadoFisico() {
     // Limpar o cache da sessão na inicialização da página
     sessionStorage.clear();
   }, []);
+
+  // Funções auxiliares para as novas funcionalidades
+  const identificarGrupoMuscular = (nomeExercicio: string): string => {
+    const nome = nomeExercicio.toLowerCase();
+    
+    if (nome.includes('supino') || nome.includes('peito') || nome.includes('peitoral') || 
+        nome.includes('flexão') || nome.includes('crucifixo') || nome.includes('fly')) {
+      return 'peito';
+    }
+    if (nome.includes('puxada') || nome.includes('remada') || nome.includes('costas') || 
+        nome.includes('dorsal') || nome.includes('pulley') || nome.includes('barra fixa')) {
+      return 'costas';
+    }
+    if (nome.includes('agachamento') || nome.includes('leg') || nome.includes('quadríceps') || 
+        nome.includes('posterior') || nome.includes('glúteo') || nome.includes('panturrilha') ||
+        nome.includes('coxa') || nome.includes('stiff')) {
+      return 'pernas';
+    }
+    if (nome.includes('desenvolvimento') || nome.includes('ombro') || nome.includes('elevação') || 
+        nome.includes('lateral') || nome.includes('frontal') || nome.includes('posterior de ombro')) {
+      return 'ombros';
+    }
+    if (nome.includes('bíceps') || nome.includes('tríceps') || nome.includes('rosca') || 
+        nome.includes('martelo') || nome.includes('testa') || nome.includes('francês')) {
+      return 'bracos';
+    }
+    if (nome.includes('abdominal') || nome.includes('prancha') || nome.includes('core') || 
+        nome.includes('oblíquo') || nome.includes('lombar')) {
+      return 'core';
+    }
+    
+    return 'outros';
+  };
+
+  const calcularVolumeExercicio = (series: string, repeticoes: string): number => {
+    const numSeries = parseInt(series.replace(/[^\d]/g, '')) || 3;
+    const numRepeticoes = parseInt(repeticoes.split(/[\/\-x]/)[0]) || 12;
+    return numSeries * numRepeticoes;
+  };
+
+  const determinarIntensidade = (repeticoes: string): 'baixa' | 'media' | 'alta' => {
+    const numRepeticoes = parseInt(repeticoes.split(/[\/\-x]/)[0]) || 12;
+    
+    if (numRepeticoes <= 6) return 'alta';
+    if (numRepeticoes <= 12) return 'media';
+    return 'baixa';
+  };
+
+  const processarTreinosComMetadados = (treinos: Treino[]): Treino[] => {
+    return treinos.map(treino => ({
+      ...treino,
+      exercicios: treino.exercicios.map(exercicio => ({
+        ...exercicio,
+        grupoMuscular: identificarGrupoMuscular(exercicio.nome),
+        volume: calcularVolumeExercicio(exercicio.series, exercicio.repeticoes),
+        intensidade: determinarIntensidade(exercicio.repeticoes)
+      }))
+    }));
+  };
+
+  const organizarTreinosPorMes = (treinos: Treino[]): TreinoPorMes[] => {
+    // Agrupar treinos por mês baseado no mês extraído da descrição
+    const treinosPorMesMap = new Map<number, Treino[]>();
+    
+    treinos.forEach(treino => {
+      const mes = treino.mes || 1; // Use o mês extraído ou default para 1
+      
+      if (!treinosPorMesMap.has(mes)) {
+        treinosPorMesMap.set(mes, []);
+      }
+      
+      // Adicionar metadados aos exercícios
+      const treinoComMetadados = {
+        ...treino,
+        exercicios: treino.exercicios.map(exercicio => ({
+          ...exercicio,
+          grupoMuscular: identificarGrupoMuscular(exercicio.nome),
+          volume: calcularVolumeExercicio(exercicio.series, exercicio.repeticoes),
+          intensidade: determinarIntensidade(exercicio.repeticoes)
+        }))
+      };
+      
+      treinosPorMesMap.get(mes)!.push(treinoComMetadados);
+    });
+    
+    // Converter para array de TreinoPorMes
+    const treinosPorMesArray: TreinoPorMes[] = [];
+    
+    // Ordenar os meses (1, 2, 3...)
+    const mesesOrdenados = Array.from(treinosPorMesMap.keys()).sort();
+    
+    mesesOrdenados.forEach(mes => {
+      const treinosDoMes = treinosPorMesMap.get(mes)!;
+      
+      const volumeTotal = treinosDoMes.reduce((total, treino) => 
+        total + treino.exercicios.reduce((subTotal, exercicio) => 
+          subTotal + (exercicio.volume || 0), 0), 0);
+      
+      // Determinar intensidade média baseada no mês
+      let intensidadeMedia = 'Média';
+      if (mes === 1) intensidadeMedia = 'Baixa';
+      else if (mes === 2) intensidadeMedia = 'Média';
+      else if (mes === 3) intensidadeMedia = 'Alta';
+      
+      treinosPorMesArray.push({
+        mes,
+        treinos: treinosDoMes,
+        volumeTotal,
+        intensidadeMedia,
+        frequenciaSemanal: typeof dadosFisicos?.disponibilidade_semanal === 'number' 
+          ? dadosFisicos.disponibilidade_semanal 
+          : parseInt(String(dadosFisicos?.disponibilidade_semanal)) || 3
+      });
+    });
+    
+    return treinosPorMesArray;
+  };
+
+  const filtrarExerciciosPorGrupo = (exercicios: Exercicio[], grupo: FiltroGrupoMuscular): Exercicio[] => {
+    if (!grupo) return exercicios;
+    return exercicios.filter(exercicio => exercicio.grupoMuscular === grupo);
+  };
+
+  const ordenarExercicios = (exercicios: Exercicio[], criterio: OrdenacaoTipo): Exercicio[] => {
+    const exerciciosOrdenados = [...exercicios];
+    
+    switch (criterio) {
+      case 'alfabetica':
+        return exerciciosOrdenados.sort((a, b) => a.nome.localeCompare(b.nome));
+      case 'volume':
+        return exerciciosOrdenados.sort((a, b) => (b.volume || 0) - (a.volume || 0));
+      case 'intensidade':
+        const intensidadeOrdem = { 'alta': 3, 'media': 2, 'baixa': 1 };
+        return exerciciosOrdenados.sort((a, b) => 
+          (intensidadeOrdem[b.intensidade || 'media']) - (intensidadeOrdem[a.intensidade || 'media']));
+      default:
+        return exerciciosOrdenados;
+    }
+  };
+
+  // Memoizar os treinos filtrados e ordenados do mês selecionado
+  const treinosDoMesFiltrados = useMemo(() => {
+    const mesData = treinosPorMes.find(m => m.mes === mesSelecionado);
+    if (!mesData) {
+      return [];
+    }
+
+    return mesData.treinos.map(treino => ({
+      ...treino,
+      exercicios: ordenarExercicios(
+        filtrarExerciciosPorGrupo(treino.exercicios, filtroGrupoMuscular),
+        ordenacao
+      )
+    })).filter(treino => treino.exercicios.length > 0); // Remover treinos sem exercícios após filtro
+  }, [treinosPorMes, mesSelecionado, filtroGrupoMuscular, ordenacao]);
+
+  const calcularEstatisticasDoMes = (mes: number) => {
+    const mesData = treinosPorMes.find(m => m.mes === mes);
+    if (!mesData) return { volumeTotal: 0, intensidadeMedia: 'Média', frequenciaSemanal: 3 };
+    
+    return {
+      volumeTotal: mesData.volumeTotal,
+      intensidadeMedia: mesData.intensidadeMedia,
+      frequenciaSemanal: mesData.frequenciaSemanal
+    };
+  };
 
   // Atualize o estilo da scrollbar dinamicamente
   useEffect(() => {
@@ -363,6 +557,7 @@ export function ResultadoFisico() {
             const treinos: Treino[] = [];
             let treinoAtual: Treino | null = null;
             
+            // Regex melhorado para capturar treino e mês
             const regexTreino = /TREINO\s+([A-Z])(?:\s*[:]\s*|\s+)(.+)?/i;
             const regexExercicio = /^(\d+)\s*[-–—]\s*(.+)/i;
             
@@ -378,12 +573,33 @@ export function ResultadoFisico() {
                   treinos.push(treinoAtual);
                 }
                 
+                const descricaoCompleta = matchTreino[2] || '';
+                
+                // Extrair o mês da descrição usando regex para parênteses
+                let mes = 1; // Default
+                const regexMes = /\((.*?mês.*?)\)/i;
+                const matchMes = descricaoCompleta.match(regexMes);
+                
+                if (matchMes) {
+                  const textoMes = matchMes[1].toLowerCase();
+                  if (textoMes.includes('primeiro') || textoMes.includes('1')) {
+                    mes = 1;
+                  } else if (textoMes.includes('segundo') || textoMes.includes('2')) {
+                    mes = 2;
+                  } else if (textoMes.includes('terceiro') || textoMes.includes('3')) {
+                    mes = 3;
+                  }
+                }
+                
+                // console.log(`Processando treino: ${linha}, Mês extraído: ${mes}`);
+                
                 // Criar novo treino
                 treinoAtual = {
                   letra: matchTreino[1], // A, B, C, etc.
-                  descricao: matchTreino[2] || '',
+                  descricao: descricaoCompleta,
                   titulo: linha,
-                  exercicios: []
+                  exercicios: [],
+                  mes: mes // Adicionar o mês extraído
                 };
                 continue;
               }
@@ -465,6 +681,39 @@ export function ResultadoFisico() {
       }
     }
   }, [perfil?.resultado_fisica, id]);
+
+  // Organizar treinos por mês quando os treinos processados mudarem
+  useEffect(() => {
+    if (treinosProcessados.length > 0) {
+      const treinosPorMesOrganizados = organizarTreinosPorMes(treinosProcessados);
+      setTreinosPorMes(treinosPorMesOrganizados);
+      
+      // Definir o mês inicial baseado no que está disponível
+      if (treinosPorMesOrganizados.length > 0) {
+        setMesSelecionado(1);
+      }
+    }
+  }, [treinosProcessados, dadosFisicos]);
+
+  // Timer para esconder as animações após alguns segundos
+  useEffect(() => {
+    if (!carregando && perfilLiberado && perfil?.resultado_fisica) {
+      // Esconder animação dos meses após 8 segundos
+      const timerMeses = setTimeout(() => {
+        setMostrarAnimacoesMeses(false);
+      }, 8000);
+
+      // Esconder animação nutricional após 6 segundos
+      const timerNutricional = setTimeout(() => {
+        setMostrarAnimacaoNutricional(false);
+      }, 6000);
+
+      return () => {
+        clearTimeout(timerMeses);
+        clearTimeout(timerNutricional);
+      };
+    }
+  }, [carregando, perfilLiberado, perfil?.resultado_fisica]);
 
   // Modificar a função encontrarVideoDoExercicioMemoizado para salvar no localStorage após a primeira busca
   const encontrarVideoDoExercicioMemoizado = React.useCallback((nomeExercicio: string, dispositivo: 'APP' | 'WEB' | 'PDF' = 'WEB') => {
@@ -887,56 +1136,95 @@ export function ResultadoFisico() {
     // Usar a versão memoizada para encontrar vídeos
     const videoUrl = encontrarVideoDoExercicioMemoizado(exercicio.nome, 'WEB');
     
-        return (
+    // Função para obter a cor da intensidade
+    const getIntensidadeCor = (intensidade?: 'baixa' | 'media' | 'alta') => {
+      switch (intensidade) {
+        case 'alta': return 'text-red-600 bg-red-100 dark:bg-red-900/20';
+        case 'media': return 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/20';
+        case 'baixa': return 'text-green-600 bg-green-100 dark:bg-green-900/20';
+        default: return 'text-gray-600 bg-gray-100 dark:bg-gray-700';
+      }
+    };
+
+    // Função para obter a cor do grupo muscular
+    const getGrupoMuscularCor = (grupo?: string) => {
+      const cores = {
+        'peito': 'text-blue-600 bg-blue-100 dark:bg-blue-900/20',
+        'costas': 'text-green-600 bg-green-100 dark:bg-green-900/20',
+        'pernas': 'text-red-600 bg-red-100 dark:bg-red-900/20',
+        'ombros': 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/20',
+        'bracos': 'text-purple-600 bg-purple-100 dark:bg-purple-900/20',
+        'core': 'text-orange-600 bg-orange-100 dark:bg-orange-900/20',
+      };
+      return cores[grupo as keyof typeof cores] || 'text-gray-600 bg-gray-100 dark:bg-gray-700';
+    };
+
+    return (
       <div className="bg-purple-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-4">
-                        <div className="flex flex-col mb-3">
-                          <div className="flex items-start mb-2">
-                            <div className="bg-purple-600 text-white rounded-full w-6 h-6 flex items-center justify-center mr-2 flex-shrink-0 mt-0.5">
-                              <span className="text-sm font-bold">{exercicio.numero}</span>
-                            </div>
-                            <span className="text-gray-800 dark:text-white font-medium">
-                              {exercicio.nome}
-                            </span>
-                          </div>
-                          
-                          <div className="pl-8 mb-3 flex items-center gap-2">
-                            {videoUrl && (
-                              <button
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setVideoModalUrl(videoUrl);
-                                }}
-                                className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-full inline-flex items-center"
-                              >
-                                <Play className="w-3 h-3 mr-1.5" />VER VÍDEO
-                              </button>
-                            )}
-                            
-                            <BotaoMetodoTreino nomeExercicio={exercicio.nome} />
-                          </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 pl-8">
-                          <div className="pr-4">
-                            <div className="uppercase text-xs text-purple-600 dark:text-purple-400 font-semibold mb-1">
-                              SÉRIES
-                            </div>
-                            <div className="font-bold text-lg">
-                              {exercicio.series}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="uppercase text-xs text-purple-600 dark:text-purple-400 font-semibold mb-1">
-                              REPETIÇÕES
-                            </div>
-                            <div className="font-bold text-lg">
-                              {exercicio.repeticoes}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
+        <div className="flex flex-col mb-3">
+          <div className="flex items-start mb-2">
+            <div className="bg-purple-600 text-white rounded-full w-6 h-6 flex items-center justify-center mr-2 flex-shrink-0 mt-0.5">
+              <span className="text-sm font-bold">{exercicio.numero}</span>
+            </div>
+            <div className="flex-1">
+              <span className="text-gray-800 dark:text-white font-medium block">
+                {exercicio.nome}
+              </span>
+              
+              {/* Tags de Grupo Muscular e Intensidade */}
+              <div className="flex gap-2 mt-1 flex-wrap">
+                {exercicio.grupoMuscular && exercicio.grupoMuscular !== 'outros' && (
+                  <span className={`px-2 py-1 text-xs rounded-full font-medium capitalize ${getGrupoMuscularCor(exercicio.grupoMuscular)}`}>
+                    {exercicio.grupoMuscular === 'bracos' ? 'braços' : exercicio.grupoMuscular}
+                  </span>
+                )}
+                {exercicio.intensidade && (
+                  <span className={`px-2 py-1 text-xs rounded-full font-medium capitalize ${getIntensidadeCor(exercicio.intensidade)}`}>
+                    {exercicio.intensidade}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          <div className="pl-8 mb-3 flex items-center gap-2">
+            {videoUrl && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setVideoModalUrl(videoUrl);
+                }}
+                className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-full inline-flex items-center transition-colors"
+              >
+                <Play className="w-3 h-3 mr-1.5" />VER VÍDEO
+              </button>
+            )}
+            
+            <BotaoMetodoTreino nomeExercicio={exercicio.nome} />
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 pl-8">
+          <div className="pr-4">
+            <div className="uppercase text-xs text-purple-600 dark:text-purple-400 font-semibold mb-1">
+              SÉRIES
+            </div>
+            <div className="font-bold text-lg">
+              {exercicio.series}
+            </div>
+          </div>
+          <div>
+            <div className="uppercase text-xs text-purple-600 dark:text-purple-400 font-semibold mb-1">
+              REPETIÇÕES
+            </div>
+            <div className="font-bold text-lg">
+              {exercicio.repeticoes}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   });
 
   // Componente otimizado para cada treino (memoizado)
@@ -961,6 +1249,193 @@ export function ResultadoFisico() {
         );
   });
 
+  // Componentes para as novas funcionalidades
+  const ProgressoMensal = () => {
+    if (treinosPorMes.length <= 1) return null;
+
+    return (
+      <div className="mb-3 bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+            Progresso do Programa
+          </span>
+          <span className="text-sm font-bold text-purple-600">
+            Mês {mesSelecionado} de {treinosPorMes.length}
+          </span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+          <div 
+            className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+            style={{ width: `${(mesSelecionado / treinosPorMes.length) * 100}%` }}
+          ></div>
+        </div>
+      </div>
+    );
+  };
+
+  const CardsEstatisticas = () => {
+    const estatisticas = calcularEstatisticasDoMes(mesSelecionado);
+    
+    // Formatar o volume para exibição mais limpa
+    const volumeFormatado = estatisticas.volumeTotal > 1000 
+      ? `${(estatisticas.volumeTotal / 1000).toFixed(1)}k`
+      : estatisticas.volumeTotal.toString();
+
+    return (
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        {/* Card de Volume */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center mb-1">
+            <Activity className="w-4 h-4 text-purple-600 mr-1" />
+            <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              Volume Semanal
+            </h3>
+          </div>
+          <div className="flex items-baseline">
+            <span className="text-xl font-bold text-purple-600">
+              {volumeFormatado}
+            </span>
+            <span className="ml-1 text-sm text-gray-500">
+              rep
+            </span>
+          </div>
+        </div>
+
+        {/* Card de Frequência */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center mb-1">
+            <Calendar className="w-4 h-4 text-purple-600 mr-1" />
+            <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              Frequência Semanal
+            </h3>
+          </div>
+          <div className="flex items-baseline">
+            <span className="text-xl font-bold text-purple-600">
+              {estatisticas.frequenciaSemanal}
+            </span>
+            <span className="ml-1 text-sm text-gray-500">
+              dias
+            </span>
+          </div>
+        </div>
+
+        {/* Card de Intensidade */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center mb-1">
+            <Target className="w-4 h-4 text-purple-600 mr-1" />
+            <h3 className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              Intensidade Média
+            </h3>
+          </div>
+          <div className="flex items-baseline">
+            <span className="text-xl font-bold text-purple-600">
+              {estatisticas.intensidadeMedia}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+
+
+  const FiltrosEOrdenacao = () => {
+    return (
+      <div className="mb-3 p-3 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
+            <div className="flex items-center gap-1">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <select 
+                className="px-2 py-1.5 rounded text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                value={filtroGrupoMuscular}
+                onChange={(e) => setFiltroGrupoMuscular(e.target.value as FiltroGrupoMuscular)}
+              >
+                <option value="">Todos os Grupos Musculares</option>
+                <option value="peito">Peito</option>
+                <option value="costas">Costas</option>
+                <option value="pernas">Pernas</option>
+                <option value="ombros">Ombros</option>
+                <option value="bracos">Braços</option>
+                <option value="core">Core/Abdômen</option>
+              </select>
+            </div>
+
+            <select 
+              className="px-2 py-1.5 rounded text-sm border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              value={ordenacao}
+              onChange={(e) => setOrdenacao(e.target.value as OrdenacaoTipo)}
+            >
+              <option value="padrao">Ordem Padrão</option>
+              <option value="alfabetica">Ordem Alfabética</option>
+              <option value="volume">Maior Volume</option>
+              <option value="intensidade">Maior Intensidade</option>
+            </select>
+          </div>
+
+          <button 
+            onClick={() => setMostrarComparacao(!mostrarComparacao)}
+            className="flex items-center text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 transition-colors text-sm"
+          >
+            <BarChart3 className="w-4 h-4 mr-1" />
+            {mostrarComparacao ? 'Ocultar' : 'Mostrar'} Comparação
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const TabelaComparacao = () => {
+    if (!mostrarComparacao || treinosPorMes.length <= 1) return null;
+
+    return (
+      <div className="mb-3 p-3 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-white mb-2 flex items-center">
+          <TrendingUp className="w-4 h-4 mr-1 text-purple-600" />
+          Evolução Mensal
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-700">
+                <th className="text-left py-2 text-gray-600 dark:text-gray-300">Mês</th>
+                <th className="text-right py-2 text-gray-600 dark:text-gray-300">Volume</th>
+                <th className="text-right py-2 text-gray-600 dark:text-gray-300">Intensidade</th>
+                <th className="text-right py-2 text-gray-600 dark:text-gray-300">Frequência</th>
+              </tr>
+            </thead>
+            <tbody>
+              {treinosPorMes.map(mesData => {
+                const isAtual = mesData.mes === mesSelecionado;
+                return (
+                  <tr 
+                    key={mesData.mes} 
+                    className={`border-b border-gray-100 dark:border-gray-700 ${
+                      isAtual ? 'bg-purple-50 dark:bg-purple-900/20' : ''
+                    }`}
+                  >
+                    <td className={`py-2 ${isAtual ? 'font-bold text-purple-600' : 'text-gray-800 dark:text-white'}`}>
+                      {mesData.mes}º Mês
+                    </td>
+                    <td className="text-right py-2 text-gray-800 dark:text-white">
+                      {mesData.volumeTotal}
+                    </td>
+                    <td className="text-right py-2 text-gray-800 dark:text-white">
+                      {mesData.intensidadeMedia}
+                    </td>
+                    <td className="text-right py-2 text-gray-800 dark:text-white">
+                      {mesData.frequenciaSemanal} dias
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   // Função renderizarResultado otimizada
   const renderizarResultado = (conteudo: string | null) => {
     if (!conteudo) {
@@ -976,12 +1451,30 @@ export function ResultadoFisico() {
     if (treinosProcessados.length === 0) {
       return <div className="flex justify-center p-4">Processando dados...</div>;
     }
-    
+
     return (
       <div>
-        {treinosProcessados.map((treino, index) => (
-          <TreinoCard key={index} treino={treino} index={index} />
-        ))}
+        {/* Progresso Mensal */}
+        <ProgressoMensal />
+
+        {/* Cards de Estatísticas */}
+        <CardsEstatisticas />
+
+        {/* Abas dos Meses */}
+        <AbsMeses />
+
+        {/* Filtros e Ordenação */}
+        <FiltrosEOrdenacao />
+
+        {/* Tabela de Comparação */}
+        <TabelaComparacao />
+
+        {/* Treinos do Mês Selecionado */}
+        <div>
+          {treinosDoMesFiltrados.map((treino, index) => (
+            <TreinoCard key={`${treino.letra}-${index}`} treino={treino} index={index} />
+          ))}
+        </div>
       </div>
     );
   };
@@ -1039,96 +1532,147 @@ export function ResultadoFisico() {
         <VideoModal videoUrl={videoModalUrl} onClose={() => setVideoModalUrl(null)} />
       )}
       
-      <div className="max-w-5xl mx-auto px-4 py-6">
-        {/* Cabeçalho simplificado no estilo da imagem */}
-        <div className="mb-6">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="mb-4 p-1.5 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/20 rounded-full transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          
-          <h1 className="text-2xl font-bold">
-            <div className="text-purple-600">Programação Física</div>
-          </h1>
-          <div className="h-1 w-32 bg-purple-600 mt-2 mb-4 rounded-full"></div>
-          
-          <p className="text-gray-600 dark:text-gray-300 text-sm">
-            Confira sua ficha de treino personalizada e comece a transformar seu corpo hoje mesmo.
-          </p>
-        </div>
-
-        {/* Seus Dados */}
-        {dadosFisicos && (
-          <div className="mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-semibold text-purple-700 dark:text-purple-400 mb-4">Seus Dados</h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="flex flex-col">
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  Objetivo
-                </span>
-                <span className="text-sm font-semibold text-gray-900 dark:text-white capitalize">
-                  {dadosFisicos.objetivo?.toLowerCase()}
-                </span>
-              </div>
+      {/* Layout Responsivo */}
+      <div className="lg:flex lg:h-screen">
+        {/* Layout Desktop - Split Screen */}
+        <div className="hidden lg:block lg:w-1/2 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 p-6 overflow-hidden border-r border-gray-200 dark:border-gray-700 flex flex-col h-screen relative">
+          <div className="flex-1 flex flex-col">
+            {/* Cabeçalho Desktop */}
+            <div className="mb-4 pt-2">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="mb-3 p-2 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/20 rounded-full transition-colors"
+              >
+                <ArrowLeft className="w-6 h-6" />
+              </button>
               
-              <div className="flex flex-col">
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  Tempo Inativo
-                </span>
-                <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {typeof dadosFisicos?.tempo_inativo === 'string' 
-                    ? dadosFisicos.tempo_inativo.replace(/_/g, '-').replace(/_meses$/, ' meses')
-                    : dadosFisicos?.tempo_inativo || 'Não informado'}
-                </span>
+              <div className="flex items-center justify-between mb-1 relative">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Programação Física
+                </h1>
+                
+                {/* Abas dos Meses - Desktop */}
+                {!carregando && perfilLiberado && perfil?.resultado_fisica && treinosPorMes.length > 1 && (
+                  <div className="relative flex space-x-1 overflow-visible">
+                    {/* Indicador animado apontando para os botões */}
+                    {mostrarAnimacoesMeses && (
+                      <div className="absolute -top-8 left-0 right-0 z-20 animate-bounce pointer-events-none">
+                        <div className="bg-purple-600 text-white text-xs px-2 py-1 rounded-lg shadow-lg mx-auto w-fit max-w-full">
+                          👆 Escolha o mês aqui
+                        </div>
+                        <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-purple-600 mx-auto mt-0"></div>
+                      </div>
+                    )}
+                    
+                    {treinosPorMes.map((mesData) => (
+                      <button 
+                        key={mesData.mes}
+                        className={`
+                          relative px-3 py-1.5 text-sm font-semibold rounded-lg transition-all duration-200
+                          ${mesSelecionado === mesData.mes ? 
+                            'bg-purple-800 text-white shadow-md' : 
+                            'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50'
+                          }
+                        `}
+                        onClick={() => {
+                          setMesSelecionado(mesData.mes);
+                          setMostrarAnimacoesMeses(false); // Esconder animação ao clicar
+                        }}
+                      >
+                        {/* Pulso animado para chamar atenção */}
+                        {mostrarAnimacoesMeses && (
+                          <div className="absolute inset-0 rounded-lg bg-purple-400 opacity-25 animate-ping"></div>
+                        )}
+                        <span className="relative">{mesData.mes}º Mês</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
+              <div className="h-1 w-24 bg-purple-600 mb-3 rounded-full"></div>
               
-              <div className="flex flex-col">
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  Experiência
-                </span>
-                <span className="text-sm font-semibold text-gray-900 dark:text-white capitalize">
-                  {dadosFisicos.experiencia_musculacao?.toLowerCase()}
-                </span>
-              </div>
-              
-              <div className="flex flex-col col-span-3">
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  Disponibilidade Semanal
-                </span>
-                <span className="text-sm font-semibold text-gray-900 dark:text-white capitalize">
-                  {typeof dadosFisicos.disponibilidade_semanal === 'string' 
-                    ? dadosFisicos.disponibilidade_semanal.replace(/\s*dias\s*por\s*semana\s*/i, "").trim() + " dias por semana"
-                    : dadosFisicos.disponibilidade_semanal + " dias por semana"
-                  }
-                </span>
-              </div>
+              <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
+                Confira sua ficha de treino personalizada e comece a transformar seu corpo hoje mesmo.
+              </p>
             </div>
-          </div>
-        )}
 
-        {/* Conteúdo principal */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-purple-100 dark:border-purple-900">
-          {/* Cabeçalho do cartão com posicionamento atualizado */}
-          <div className="relative border-b border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
-            <div className="flex flex-col space-y-4">
-              <div className="flex items-center">
-                <div className="w-1 h-6 bg-purple-600 rounded-full mr-3"></div>
-                <h2 className="text-base font-medium text-gray-800 dark:text-white">
-                  Sua programação física
-                </h2>
+            {/* Seus Dados */}
+            {dadosFisicos && (
+              <div className="mb-4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-semibold text-purple-700 dark:text-purple-400 mb-3">Seus Dados</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="flex flex-col">
+                    <span className="text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1 text-xs">
+                      Objetivo
+                    </span>
+                    <span className="font-semibold text-gray-900 dark:text-white capitalize">
+                      {dadosFisicos.objetivo?.toLowerCase()}
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-col">
+                    <span className="text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1 text-xs">
+                      Tempo Inativo
+                    </span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {typeof dadosFisicos?.tempo_inativo === 'string' 
+                        ? dadosFisicos.tempo_inativo.replace(/_/g, '-').replace(/_meses$/, ' meses')
+                        : dadosFisicos?.tempo_inativo || 'Não informado'}
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-col">
+                    <span className="text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1 text-xs">
+                      Experiência
+                    </span>
+                    <span className="font-semibold text-gray-900 dark:text-white capitalize">
+                      {dadosFisicos.experiencia_musculacao?.toLowerCase()}
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-col">
+                    <span className="text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1 text-xs">
+                      Disponibilidade
+                    </span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {typeof dadosFisicos.disponibilidade_semanal === 'string' 
+                        ? dadosFisicos.disponibilidade_semanal.replace(/\s*dias\s*por\s*semana\s*/i, "").trim() + " dias/sem"
+                        : dadosFisicos.disponibilidade_semanal + " dias/sem"
+                      }
+                    </span>
+                  </div>
+                </div>
               </div>
+            )}
 
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                {/* Botão Ver Programação Nutricional */}
+            {/* Botões de Ação */}
+            <div className="mb-4 space-y-2">
+              <div className="relative overflow-visible">
+                {/* Indicador animado para o botão nutricional */}
+                {mostrarAnimacaoNutricional && (
+                  <div className="absolute -top-8 left-0 right-0 z-20 animate-bounce pointer-events-none">
+                    <div className="bg-orange-600 text-white text-xs px-2 py-1 rounded-lg shadow-lg mx-auto w-fit max-w-full">
+                      🍎 Veja também sua dieta
+                    </div>
+                    <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-orange-600 mx-auto mt-0"></div>
+                  </div>
+                )}
+                
                 <button
-                  onClick={() => navigate('/resultado-nutricional')}
-                  className="flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium bg-orange-600 hover:bg-orange-700 text-white shadow-sm hover:shadow transition-all"
+                  onClick={() => {
+                    navigate('/resultado-nutricional');
+                    setMostrarAnimacaoNutricional(false); // Esconder animação ao clicar
+                  }}
+                  className="relative w-full flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-medium bg-orange-600 hover:bg-orange-700 text-white shadow-sm hover:shadow transition-all overflow-hidden"
                 >
+                  {/* Brilho animado de fundo */}
+                  {mostrarAnimacaoNutricional && (
+                    <div className="absolute inset-0 bg-gradient-to-r from-orange-400 via-orange-500 to-orange-400 opacity-30 animate-pulse"></div>
+                  )}
+                  
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    className="w-4 h-4 mr-2"
+                    className="relative w-4 h-4 mr-2"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -1140,48 +1684,62 @@ export function ResultadoFisico() {
                       d="M13 10V3L4 14h7v7l9-11h-7z"
                     />
                   </svg>
-                  Ver Programação Nutricional
-                </button>
-
-                {/* Botão Baixar PDF */}
-                <button
-                  onClick={() => {
-                    console.log("Botão 'Baixar PDF' clicado");
-                    gerarPDF();
-                  }}
-                  disabled={gerandoPDF || !perfil?.resultado_fisica || carregando}
-                  className={`
-                    flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium 
-                    ${gerandoPDF || !perfil?.resultado_fisica || carregando
-                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
-                      : 'bg-purple-600 hover:bg-purple-700 text-white shadow-sm hover:shadow transition-all'}
-                  `}
-                >
-                  {gerandoPDF ? 
-                    'Gerando PDF...' : 
-                    <>
-                      <Download className="w-4 h-4 mr-2" />
-                      Baixar PDF
-                    </>
-                  }
+                  <span className="relative">Ver Programação Nutricional</span>
                 </button>
               </div>
+
+              <button
+                onClick={() => {
+                  console.log("Botão 'Baixar PDF' clicado");
+                  gerarPDF();
+                }}
+                disabled={gerandoPDF || !perfil?.resultado_fisica || carregando}
+                className={`
+                  w-full flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-medium transition-all
+                  ${gerandoPDF || !perfil?.resultado_fisica || carregando
+                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
+                    : 'bg-purple-600 hover:bg-purple-700 text-white shadow-sm hover:shadow'}
+                `}
+              >
+                {gerandoPDF ? 
+                  'Gerando PDF...' : 
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    Baixar PDF
+                  </>
+                }
+              </button>
             </div>
+
+            {/* Conteúdo de Controle Desktop */}
+            {!carregando && perfilLiberado && perfil?.resultado_fisica && (
+              <div className="flex-1 flex flex-col space-y-3">
+                <ProgressoMensal />
+                <CardsEstatisticas />
+                <FiltrosEOrdenacao />
+                <TabelaComparacao />
+              </div>
+            )}
           </div>
-          
-          {/* Corpo do cartão */}
-          <div className="p-0">
+        </div>
+
+        {/* Lado Direito Desktop */}
+        <div className="hidden lg:block lg:w-1/2 bg-white dark:bg-gray-900 overflow-y-auto">
+          <div className="p-8">
             {carregando ? (
               <TelaCarregamento />
             ) : !perfilLiberado ? (
-              <div className="bg-yellow-50 dark:bg-gray-700 border-l-4 border-yellow-400 p-4 m-4 rounded">
+              <div className="bg-yellow-50 dark:bg-gray-700 border-l-4 border-yellow-400 p-6 rounded-lg">
                 <div className="flex">
                   <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                    <svg className="h-6 w-6 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                     </svg>
                   </div>
                   <div className="ml-3">
+                    <h3 className="text-lg font-medium text-yellow-800 dark:text-yellow-200 mb-2">
+                      Acesso Pendente
+                    </h3>
                     <p className="text-sm text-yellow-700 dark:text-yellow-200">
                       Seu acesso aos resultados ainda não foi liberado. Entre em contato com o administrador.
                     </p>
@@ -1189,24 +1747,44 @@ export function ResultadoFisico() {
                 </div>
               </div>
             ) : perfil?.resultado_fisica ? (
-              <div className="custom-scrollbar overflow-y-auto max-h-[70vh]">
-                {renderizarResultado(perfil.resultado_fisica)}
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">
+                  Treinos do {mesSelecionado}º Mês
+                </h2>
+                
+                <div className="space-y-6">
+                  {treinosDoMesFiltrados.map((treino, index) => (
+                    <TreinoCard key={`${treino.letra}-${index}`} treino={treino} index={index} />
+                  ))}
+                </div>
+                
+                {treinosDoMesFiltrados.length === 0 && (
+                  <div className="text-center py-12">
+                    <div className="text-gray-400 dark:text-gray-600 mb-4">
+                      <Filter className="w-16 h-16 mx-auto" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-600 dark:text-gray-400 mb-2">
+                      Nenhum treino encontrado
+                    </h3>
+                    <p className="text-gray-500 dark:text-gray-500">
+                      Tente ajustar os filtros ou selecionar outro mês.
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-12 px-4">
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-md w-full text-center shadow-lg border border-purple-100 dark:border-purple-900 relative overflow-hidden">
-                  {/* Efeito de gradiente decorativo no topo */}
-                  <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-purple-400 via-purple-600 to-purple-800"></div>
-                  
+              <div className="flex flex-col items-center justify-center py-24">
+                <div className="text-center max-w-md">
                   <div className="relative bg-purple-100 dark:bg-purple-900/30 w-24 h-24 rounded-full mx-auto mb-6 flex items-center justify-center">
-                    <svg className="w-12 h-12 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <svg className="w-12 h-12 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
-                    {/* Animação de pulso */}
                     <span className="absolute w-full h-full rounded-full bg-purple-200 dark:bg-purple-800/40 animate-ping opacity-30"></span>
                   </div>
                   
-                  <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">Resultado em Processamento</h2>
+                  <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">
+                    Resultado em Processamento
+                  </h2>
                   
                   <p className="text-gray-600 dark:text-gray-300 mb-6">
                     A programação física está sendo elaborada pela nossa equipe de especialistas.
@@ -1224,6 +1802,289 @@ export function ResultadoFisico() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Layout Mobile - Rolável */}
+        <div className="lg:hidden min-h-screen bg-gray-50 dark:bg-gray-900">
+          <div className="max-w-5xl mx-auto px-4 py-6">
+            {/* Cabeçalho Mobile */}
+            <div className="mb-6">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="mb-4 p-1.5 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/20 rounded-full transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              
+              <h1 className="text-2xl font-bold">
+                <div className="text-purple-600">Programação Física</div>
+              </h1>
+              <div className="h-1 w-32 bg-purple-600 mt-2 mb-4 rounded-full"></div>
+              
+              <p className="text-gray-600 dark:text-gray-300 text-sm">
+                Confira sua ficha de treino personalizada e comece a transformar seu corpo hoje mesmo.
+              </p>
+            </div>
+
+            {/* Seus Dados Mobile */}
+            {dadosFisicos && (
+              <div className="mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-semibold text-purple-700 dark:text-purple-400 mb-4">Seus Dados</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      Objetivo
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white capitalize">
+                      {dadosFisicos.objetivo?.toLowerCase()}
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      Tempo Inativo
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                      {typeof dadosFisicos?.tempo_inativo === 'string' 
+                        ? dadosFisicos.tempo_inativo.replace(/_/g, '-').replace(/_meses$/, ' meses')
+                        : dadosFisicos?.tempo_inativo || 'Não informado'}
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      Experiência
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white capitalize">
+                      {dadosFisicos.experiencia_musculacao?.toLowerCase()}
+                    </span>
+                  </div>
+                  
+                  <div className="flex flex-col">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      Disponibilidade Semanal
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white capitalize">
+                      {typeof dadosFisicos.disponibilidade_semanal === 'string' 
+                        ? dadosFisicos.disponibilidade_semanal.replace(/\s*dias\s*por\s*semana\s*/i, "").trim() + " dias por semana"
+                        : dadosFisicos.disponibilidade_semanal + " dias por semana"
+                      }
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Conteúdo principal Mobile */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-purple-100 dark:border-purple-900">
+              <div className="relative border-b border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
+                <div className="flex flex-col space-y-4">
+                  <div className="flex items-center">
+                    <div className="w-1 h-6 bg-purple-600 rounded-full mr-3"></div>
+                    <h2 className="text-base font-medium text-gray-800 dark:text-white">
+                      Sua programação física
+                    </h2>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="relative">
+                      {/* Indicador animado mobile */}
+                      {mostrarAnimacaoNutricional && (
+                        <div className="absolute -top-6 left-1/2 transform -translate-x-1/2 z-10 animate-pulse">
+                          <div className="bg-orange-600 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap">
+                            🍎 Sua dieta aqui
+                          </div>
+                        </div>
+                      )}
+                      
+                      <button
+                        onClick={() => {
+                          navigate('/resultado-nutricional');
+                          setMostrarAnimacaoNutricional(false); // Esconder animação ao clicar
+                        }}
+                        className="relative flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium bg-orange-600 hover:bg-orange-700 text-white shadow-sm hover:shadow transition-all overflow-hidden"
+                      >
+                        {/* Brilho animado de fundo */}
+                        {mostrarAnimacaoNutricional && (
+                          <div className="absolute inset-0 bg-gradient-to-r from-orange-400 via-orange-500 to-orange-400 opacity-30 animate-pulse"></div>
+                        )}
+                        
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="relative w-4 h-4 mr-2"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M13 10V3L4 14h7v7l9-11h-7z"
+                          />
+                        </svg>
+                        <span className="relative">Ver Programação Nutricional</span>
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        console.log("Botão 'Baixar PDF' clicado");
+                        gerarPDF();
+                      }}
+                      disabled={gerandoPDF || !perfil?.resultado_fisica || carregando}
+                      className={`
+                        flex items-center justify-center px-4 py-2 rounded-lg text-sm font-medium 
+                        ${gerandoPDF || !perfil?.resultado_fisica || carregando
+                          ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
+                          : 'bg-purple-600 hover:bg-purple-700 text-white shadow-sm hover:shadow transition-all'}
+                      `}
+                    >
+                      {gerandoPDF ? 
+                        'Gerando PDF...' : 
+                        <>
+                          <Download className="w-4 h-4 mr-2" />
+                          Baixar PDF
+                        </>
+                      }
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-0">
+                {carregando ? (
+                  <TelaCarregamento />
+                ) : !perfilLiberado ? (
+                  <div className="bg-yellow-50 dark:bg-gray-700 border-l-4 border-yellow-400 p-4 m-4 rounded">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-yellow-700 dark:text-yellow-200">
+                          Seu acesso aos resultados ainda não foi liberado. Entre em contato com o administrador.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : perfil?.resultado_fisica ? (
+                  <div className="custom-scrollbar overflow-y-auto">
+                    {/* Controles Mobile */}
+                    {!carregando && perfilLiberado && perfil?.resultado_fisica && (
+                      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                        <ProgressoMensal />
+                        <CardsEstatisticas />
+                        <FiltrosEOrdenacao />
+                        <TabelaComparacao />
+                        
+                        {/* Abas dos Meses Mobile - Em baixo */}
+                        {treinosPorMes.length > 1 && (
+                          <div className="mb-4 relative">
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                Selecione o Mês:
+                              </h4>
+                              {/* Indicador animado para mobile */}
+                              {mostrarAnimacoesMeses && (
+                                <div className="flex items-center text-purple-600 animate-pulse">
+                                  <span className="text-xs mr-1">Toque aqui</span>
+                                  <span className="text-lg">👇</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="relative flex space-x-2">
+                              {/* Brilho animado de fundo */}
+                              {mostrarAnimacoesMeses && (
+                                <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-purple-200 via-purple-300 to-purple-200 opacity-30 animate-pulse"></div>
+                              )}
+                              
+                              {treinosPorMes.map((mesData) => (
+                                <button 
+                                  key={mesData.mes}
+                                  className={`
+                                    relative flex-1 px-4 py-3 text-sm font-semibold rounded-lg transition-all duration-200
+                                    ${mesSelecionado === mesData.mes ? 
+                                      'bg-purple-800 text-white shadow-md' : 
+                                      'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50'
+                                    }
+                                  `}
+                                  onClick={() => {
+                                    setMesSelecionado(mesData.mes);
+                                    setMostrarAnimacoesMeses(false); // Esconder animação ao clicar
+                                  }}
+                                >
+                                  {/* Pulso individual para cada botão */}
+                                  {mostrarAnimacoesMeses && (
+                                    <div className="absolute inset-0 rounded-lg bg-purple-400 opacity-20 animate-ping"></div>
+                                  )}
+                                  <span className="relative">{mesData.mes}º Mês</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Treinos Mobile */}
+                    <div className="p-4">
+                      <div className="space-y-6">
+                        {treinosDoMesFiltrados.map((treino, index) => (
+                          <TreinoCard key={`${treino.letra}-${index}`} treino={treino} index={index} />
+                        ))}
+                      </div>
+                      
+                      {treinosDoMesFiltrados.length === 0 && (
+                        <div className="text-center py-12">
+                          <div className="text-gray-400 dark:text-gray-600 mb-4">
+                            <Filter className="w-16 h-16 mx-auto" />
+                          </div>
+                          <h3 className="text-lg font-medium text-gray-600 dark:text-gray-400 mb-2">
+                            Nenhum treino encontrado
+                          </h3>
+                          <p className="text-gray-500 dark:text-gray-500">
+                            Tente ajustar os filtros ou selecionar outro mês.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 px-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-8 max-w-md w-full text-center shadow-lg border border-purple-100 dark:border-purple-900 relative overflow-hidden">
+                      <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-purple-400 via-purple-600 to-purple-800"></div>
+                      
+                      <div className="relative bg-purple-100 dark:bg-purple-900/30 w-24 h-24 rounded-full mx-auto mb-6 flex items-center justify-center">
+                        <svg className="w-12 h-12 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span className="absolute w-full h-full rounded-full bg-purple-200 dark:bg-purple-800/40 animate-ping opacity-30"></span>
+                      </div>
+                      
+                      <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">Resultado em Processamento</h2>
+                      
+                      <p className="text-gray-600 dark:text-gray-300 mb-6">
+                        A programação física está sendo elaborada pela nossa equipe de especialistas.
+                      </p>
+                      
+                      <div className="flex justify-center space-x-2 mb-4">
+                        <span className="w-3 h-3 rounded-full bg-purple-600 animate-bounce"></span>
+                        <span className="w-3 h-3 rounded-full bg-purple-600 animate-bounce delay-75"></span>
+                        <span className="w-3 h-3 rounded-full bg-purple-600 animate-bounce delay-150"></span>
+                      </div>
+                      
+                      <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                        Você receberá uma notificação assim que estiver disponível.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

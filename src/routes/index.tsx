@@ -9,9 +9,17 @@ import { RedefinirSenha } from '../pages/RedefinirSenha';
 import { Resultados } from '../pages/Resultados';
 import { ResultadoFisico } from '../pages/ResultadoFisico';
 import { PrivateRoute } from '../components/PrivateRoute';
+import { AdminRoute } from '../components/AdminRoute';
+import { PreparadorRoute } from '../components/PreparadorRoute';
 import { ProtectedFormRoute } from './ProtectedFormRoute';
 import { MaintenancePage } from '../pages/MaintenancePage';
 import { Layout } from '../components/Layout';
+
+// Importar páginas de Admin e Preparador
+import { AdminDashboard } from '../pages/admin/Dashboard';
+import { VisualizarUsuario } from '../pages/admin/VisualizarUsuario';
+import { PreparadorDashboard } from '../pages/preparador/Dashboard';
+import { AnalisarCliente } from '../pages/preparador/AnalisarCliente';
 
 // Componente temporário para configurações
 const Configuracoes = () => <div>Página de Configurações</div>;
@@ -54,17 +62,7 @@ export function AppRoutes() {
         } 
       />
       
-      {/* Rota para a página de fotos em manutenção */}
-      <Route 
-        path="/fotos" 
-        element={
-          <PrivateRoute>
-            <Layout>
-              <MaintenancePage />
-            </Layout>
-          </PrivateRoute>
-        } 
-      />
+
       
       {/* Rotas para resultados */}
       <Route 
@@ -106,6 +104,42 @@ export function AppRoutes() {
         path="/avaliacao-nutricional/masculino" 
         element={
           <ProtectedFormRoute component={AvaliacaoNutricionalMasculina} formType="nutricional" />
+        } 
+      />
+      
+      {/* Rotas de Admin */}
+      <Route 
+        path="/admin/dashboard" 
+        element={
+          <AdminRoute>
+            <AdminDashboard />
+          </AdminRoute>
+        } 
+      />
+      <Route 
+        path="/admin/usuario/:id" 
+        element={
+          <AdminRoute>
+            <VisualizarUsuario />
+          </AdminRoute>
+        } 
+      />
+      
+      {/* Rotas de Preparador */}
+      <Route 
+        path="/preparador/dashboard" 
+        element={
+          <PreparadorRoute>
+            <PreparadorDashboard />
+          </PreparadorRoute>
+        } 
+      />
+      <Route 
+        path="/preparador/analisar/:id" 
+        element={
+          <PreparadorRoute>
+            <AnalisarCliente />
+          </PreparadorRoute>
         } 
       />
       

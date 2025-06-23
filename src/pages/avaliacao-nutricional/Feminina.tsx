@@ -1,30 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { Scale, AlertCircle, CheckCircle, Loader2, ClipboardCheck, ArrowLeft, Heart, User, Sun, Moon } from 'lucide-react';
-import { Layout } from '../components/Layout';
-import { useTheme } from '../contexts/ThemeContext';
-import { getThemeClass } from '../styles/theme';
-import TrueFocus from '../components/TrueFocus';
+import { Layout } from '../../components/Layout';
+import { useTheme } from '../../contexts/ThemeContext';
+import { getThemeClass } from '../../styles/theme';
 
-// Estilos de tema consistentes com o formulário masculino
+// Design energético e motivacional com cores vibrantes
 const themeStyles = {
   light: {
-    background: "bg-gradient-to-br from-blue-50 via-white to-purple-50",
-    text: "text-slate-800",
-    textSecondary: "text-slate-600",
-    card: "bg-white/90 backdrop-blur-sm shadow-xl border border-white/20",
-    button: "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-lg hover:shadow-blue-500/25 text-white",
-    buttonSecondary: "bg-white hover:bg-gray-50 text-slate-700 border border-gray-200 shadow-sm",
-    input: "bg-white/90 backdrop-blur-sm border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-slate-700",
-    progressBar: {
-      track: "bg-gray-100",
-      fill: "bg-gradient-to-r from-blue-600 to-purple-600"
-    },
-    stepIndicator: {
-      active: "bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg",
-      completed: "bg-green-500 shadow-lg",
-      inactive: "bg-gray-200"
+    background: "bg-gradient-to-br from-blue-100 via-purple-50 to-orange-100",
+    text: "text-gray-800",
+    textSecondary: "text-gray-600",
+    card: "bg-white/90 backdrop-blur-md shadow-lg border border-purple-200/50",
+    button: "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg",
+    buttonSecondary: "bg-gradient-to-r from-blue-100 to-purple-100 hover:from-blue-200 hover:to-purple-200 text-blue-700",
+    input: "bg-white/70 border border-purple-300 focus:border-purple-500",
+    scrollbar: {
+      track: "bg-purple-100",
+      thumb: "bg-gradient-to-b from-blue-400 to-purple-500 hover:from-blue-500 hover:to-purple-600"
+    }
+  },
+  dark: {
+    background: "bg-gradient-to-br from-slate-900 via-purple-900/30 to-orange-900/30",
+    text: "text-white",
+    textSecondary: "text-gray-300",
+    card: "bg-slate-800/80 backdrop-blur-md border border-purple-500/30 shadow-xl",
+    button: "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg",
+    buttonSecondary: "bg-gradient-to-r from-slate-700/80 to-purple-800/50 hover:from-slate-600/80 hover:to-purple-700/50 text-purple-200",
+    input: "bg-slate-800/70 border border-purple-600 focus:border-purple-400",
+    scrollbar: {
+      track: "bg-slate-800",
+      thumb: "bg-gradient-to-b from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
     }
   }
 };
@@ -131,46 +138,32 @@ export function AvaliacaoNutricionalFeminina() {
   const [showConfirmationMessage, setShowConfirmationMessage] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   
+  const themeStyle = isDarkMode ? themeStyles.dark : themeStyles.light;
+  
   // Usando o getThemeClass para obter as classes do tema
   const themeClasses = {
-    background: isDarkMode ? 'bg-gradient-to-br from-gray-900 to-gray-800' : 'bg-gradient-to-br from-blue-50 to-indigo-100',
-    text: isDarkMode ? 'text-white' : 'text-gray-800',
-    textSecondary: isDarkMode ? 'text-gray-300' : 'text-gray-600',
-    button: isDarkMode 
-      ? 'bg-orange-500 hover:bg-orange-600 text-white transition-colors duration-200'
-      : 'bg-orange-500 hover:bg-orange-600 text-white transition-colors duration-200',
-    buttonSecondary: isDarkMode
-      ? 'bg-gray-700 hover:bg-gray-600 text-white transition-colors duration-200'
-      : 'bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 transition-colors duration-200',
-    card: isDarkMode 
-      ? 'bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-lg'
-      : 'bg-white border border-gray-200 rounded-xl p-6 shadow-lg',
-    cardTitle: isDarkMode ? 'text-white text-xl font-semibold' : 'text-gray-800 text-xl font-semibold',
-    label: isDarkMode ? 'block text-gray-300 mb-2' : 'block text-gray-700 mb-2',
-    input: isDarkMode
-      ? 'bg-gray-700 border border-gray-600 text-white rounded-lg w-full p-2.5 focus:ring-1 focus:ring-orange-500 focus:border-orange-500'
-      : 'bg-white border border-gray-300 text-gray-800 rounded-lg w-full p-2.5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500',
-    select: isDarkMode
-      ? 'bg-gray-700 border border-gray-600 text-white rounded-lg w-full p-2.5 focus:ring-1 focus:ring-orange-500 focus:border-orange-500'
-      : 'bg-white border border-gray-300 text-gray-800 rounded-lg w-full p-2.5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500',
-    radio: isDarkMode
-      ? 'text-orange-500 bg-gray-700 border-gray-600 focus:ring-orange-500'
-      : 'text-orange-500 bg-white border-gray-300 focus:ring-orange-500',
-    radioLabel: isDarkMode ? 'text-gray-300' : 'text-gray-700',
-    errorText: 'text-red-500 text-sm mt-1',
-    formSection: isDarkMode 
-      ? 'bg-gray-800/50 rounded-xl p-6 backdrop-blur-sm'
-      : 'bg-white/50 rounded-xl p-6 backdrop-blur-sm shadow-lg',
+    background: getThemeClass(isDarkMode, 'background'),
+    text: getThemeClass(isDarkMode, 'text'),
+    textSecondary: getThemeClass(isDarkMode, 'textSecondary'),
+    card: `${getThemeClass(isDarkMode, 'cardBg')} border ${getThemeClass(isDarkMode, 'border')} ${getThemeClass(isDarkMode, 'shadow')}`,
+    button: getThemeClass(isDarkMode, 'button'),
+    buttonSecondary: getThemeClass(isDarkMode, 'buttonSecondary'),
+    input: `${getThemeClass(isDarkMode, 'input')} ${
+      isDarkMode 
+        ? 'bg-gray-800 text-white border-gray-600 focus:border-orange-500' 
+        : 'bg-white text-gray-900 border-gray-300 focus:border-orange-500'
+    } block w-full rounded-lg px-4 py-2.5 text-sm transition-colors duration-200 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20`,
+    select: getThemeClass(isDarkMode, 'select'),
+    label: `${isDarkMode ? 'text-gray-200' : 'text-gray-700'} font-medium`,
+    helperText: `${isDarkMode ? 'text-gray-400' : 'text-gray-600'} text-sm`,
+    radio: `${isDarkMode ? 'text-orange-500 border-gray-600' : 'text-orange-500 border-gray-300'} h-4 w-4 focus:ring-orange-500/20`,
+    radioLabel: `${isDarkMode ? 'text-gray-200' : 'text-gray-700'} ml-2 text-sm font-medium`,
+    errorText: isDarkMode ? 'text-red-400' : 'text-red-600',
+    formSection: `${getThemeClass(isDarkMode, 'cardBg')} p-8 rounded-xl border ${getThemeClass(isDarkMode, 'border')} ${getThemeClass(isDarkMode, 'shadow')}`,
     stepIndicator: {
-      active: isDarkMode
-        ? 'bg-orange-500 text-white border-2 border-orange-500'
-        : 'bg-orange-500 text-white border-2 border-orange-500',
-      completed: isDarkMode
-        ? 'bg-green-500 text-white border-2 border-green-500'
-        : 'bg-green-500 text-white border-2 border-green-500',
-      inactive: isDarkMode
-        ? 'bg-gray-700 text-gray-400 border-2 border-gray-600'
-        : 'bg-gray-100 text-gray-600 border-2 border-gray-300'
+      active: getThemeClass(isDarkMode, 'button'),
+      completed: "bg-green-600 text-white shadow-md",
+      inactive: isDarkMode ? "bg-gray-600 text-gray-200" : "bg-gray-200 text-gray-700"
     }
   };
 
@@ -255,14 +248,40 @@ export function AvaliacaoNutricionalFeminina() {
     tem_intolerancia: false,
   });
 
-  // Aplica estilos de fundo consistentes com o dashboard
+  // Aplica estilos de fundo e animações
   useEffect(() => {
-    document.documentElement.style.background = 'linear-gradient(135deg, #f5f7ff 0%, #e0e6ff 100%)';
-    document.documentElement.style.backgroundColor = '#f5f7ff';
-    document.body.style.background = 'linear-gradient(135deg, #f5f7ff 0%, #e0e6ff 100%)';
-    document.body.style.backgroundColor = '#f5f7ff';
-    document.body.style.backgroundImage = "url(\"data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%239C92AC' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E\")";
-  }, []);
+    // Adicionar CSS personalizado para animação dos elementos nutricionais
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes float {
+        0% { transform: translateX(-100px); opacity: 0; }
+        10% { opacity: ${isDarkMode ? '0.03' : '0.05'}; }
+        90% { opacity: ${isDarkMode ? '0.03' : '0.05'}; }
+        100% { transform: translateX(calc(100vw + 100px)); opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Aplicar background consistente com o tema
+    if (isDarkMode) {
+      document.documentElement.style.background = 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)';
+      document.documentElement.style.backgroundColor = '#0f172a';
+      document.body.style.background = 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)';
+      document.body.style.backgroundColor = '#0f172a';
+    } else {
+      document.documentElement.style.background = 'linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%)';
+      document.documentElement.style.backgroundColor = '#f8fafc';
+      document.body.style.background = 'linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%)';
+      document.body.style.backgroundColor = '#f8fafc';
+    }
+    
+    // Cleanup: remover o style quando o componente for desmontado
+    return () => {
+      if (document.head.contains(style)) {
+        document.head.removeChild(style);
+      }
+    };
+  }, [isDarkMode]);
 
   useEffect(() => {
     carregarDados();
@@ -626,68 +645,157 @@ export function AvaliacaoNutricionalFeminina() {
 
   return (
     <Layout>
-      <div className={`min-h-screen ${themeClasses.background} px-4 py-8`}>
-        <div className="max-w-7xl mx-auto">
+      <div className={`min-h-screen ${themeClasses.background} relative overflow-hidden`}>
+        {/* Background decorativo com efeito nutricional feminino */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {/* Círculos decorativos */}
+          <div className={`absolute -top-40 -right-40 w-80 h-80 rounded-full ${isDarkMode ? 'bg-pink-500/5' : 'bg-pink-100/30'}`}></div>
+          <div className={`absolute -bottom-40 -left-40 w-80 h-80 rounded-full ${isDarkMode ? 'bg-purple-500/5' : 'bg-purple-100/30'}`}></div>
+          <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full ${isDarkMode ? 'bg-blue-500/3' : 'bg-blue-100/20'}`}></div>
+          
+          {/* Elementos nutricionais femininos animados bem sutis */}
+          <div className="absolute inset-0">
+            {/* Elemento 1 - linha superior */}
+            <div className={`absolute top-20 opacity-5 ${isDarkMode ? 'opacity-3' : 'opacity-5'}`} 
+                 style={{
+                   animation: 'float 35s linear infinite',
+                   left: '-50px'
+                 }}>
+              <span className="text-3xl">🌸</span>
+            </div>
+            
+            {/* Elemento 2 - linha do meio */}
+            <div className={`absolute top-1/2 opacity-5 ${isDarkMode ? 'opacity-3' : 'opacity-5'}`}
+                 style={{
+                   animation: 'float 40s linear infinite 8s',
+                   left: '-50px'
+                 }}>
+              <span className="text-2xl">🍓</span>
+            </div>
+            
+            {/* Elemento 3 - linha inferior */}
+            <div className={`absolute bottom-32 opacity-5 ${isDarkMode ? 'opacity-3' : 'opacity-5'}`}
+                 style={{
+                   animation: 'float 45s linear infinite 15s',
+                   left: '-50px'
+                 }}>
+              <span className="text-3xl">🥗</span>
+            </div>
+            
+            {/* Elemento 4 - linha alternativa */}
+            <div className={`absolute top-1/3 opacity-5 ${isDarkMode ? 'opacity-3' : 'opacity-5'}`}
+                 style={{
+                   animation: 'float 50s linear infinite 25s',
+                   left: '-50px'
+                 }}>
+              <span className="text-2xl">💖</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
           {/* Botão Voltar para Dashboard */}
           <button
             onClick={() => navigate('/dashboard')}
-            className={`flex items-center mb-6 px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors`}
+            className={`group flex items-center mb-6 px-4 py-2 rounded-xl transition-all duration-300 hover:scale-105 ${
+              isDarkMode 
+                ? 'bg-gray-800/50 text-gray-300 hover:bg-gray-700/50 border border-gray-700' 
+                : 'bg-white/80 text-gray-600 hover:bg-white shadow-sm border border-gray-200'
+            }`}
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="h-4 w-4 mr-2 transition-transform group-hover:-translate-x-1" />
             Voltar para Dashboard
           </button>
 
           {sucesso ? (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fadeIn">
-              <div className={`${isDarkMode ? 'bg-green-900/30' : 'bg-green-100'} rounded-full p-6 mb-6`}>
-                <CheckCircle className={`h-16 w-16 ${isDarkMode ? 'text-green-400' : 'text-green-500'}`} />
+            <div className="flex flex-col items-center justify-center min-h-[60vh] relative">
+              {/* Animação de confete */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                {[...Array(20)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="absolute animate-bounce"
+                    style={{
+                      left: `${Math.random() * 100}%`,
+                      top: `${Math.random() * 100}%`,
+                      animationDelay: `${Math.random() * 2}s`,
+                      animationDuration: `${2 + Math.random() * 2}s`
+                    }}
+                  >
+                    <span className="text-2xl">
+                      {['🎉', '✨', '🌟', '💖', '🌸'][Math.floor(Math.random() * 5)]}
+                    </span>
+                  </div>
+                ))}
               </div>
-              <h2 className={`text-2xl md:text-3xl font-bold mb-4 text-center ${themeClasses.text}`}>
+
+              <div className={`relative z-10 ${isDarkMode ? 'bg-green-900/20' : 'bg-green-100/80'} backdrop-blur-sm rounded-full p-8 mb-8 animate-pulse`}>
+                <CheckCircle className={`h-20 w-20 ${isDarkMode ? 'text-green-400' : 'text-green-500'} animate-bounce`} />
+              </div>
+              
+              <h2 className={`text-3xl md:text-4xl font-bold mb-6 text-center bg-gradient-to-r ${
+                isDarkMode 
+                  ? 'from-green-400 to-emerald-400' 
+                  : 'from-green-600 to-emerald-600'
+              } bg-clip-text text-transparent animate-pulse`}>
                 Avaliação Nutricional Enviada com Sucesso!
               </h2>
-              <p className={`${themeClasses.textSecondary} text-center max-w-md mb-8 text-lg`}>
-                Sua avaliação foi recebida e está sendo analisada por nossos especialistas. 
-                Em breve você receberá seu plano nutricional personalizado.
-              </p>
+              
+              <div className={`${isDarkMode ? 'bg-gray-800/50' : 'bg-white/80'} backdrop-blur-sm rounded-2xl p-6 mb-8 max-w-2xl mx-auto shadow-xl border ${isDarkMode ? 'border-gray-700/50' : 'border-white/50'}`}>
+                <p className={`${themeClasses.textSecondary} text-center text-lg leading-relaxed`}>
+                  🎉 <strong>Parabéns!</strong> Sua avaliação nutricional feminina foi recebida com sucesso e está sendo analisada por nossos especialistas em nutrição feminina.
+                  <br /><br />
+                  💖 Em breve você receberá seu plano nutricional personalizado, desenvolvido especialmente para suas necessidades e objetivos únicos como mulher.
+                </p>
+              </div>
+              
               <button
                 onClick={() => navigate('/dashboard')}
-                className={`${themeClasses.button} px-6 py-3 rounded-lg font-semibold`}
+                className={`group flex items-center px-8 py-4 rounded-xl transition-all duration-300 hover:scale-105 bg-gradient-to-r ${
+                  isDarkMode 
+                    ? 'from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600' 
+                    : 'from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600'
+                } text-white shadow-lg hover:shadow-pink-500/25 font-semibold text-lg`}
               >
+                <ArrowLeft className="h-5 w-5 mr-3 transition-transform group-hover:-translate-x-1" />
                 Voltar para o Dashboard
               </button>
             </div>
           ) : (
             <>
-              <div className="mb-12 flex flex-col items-center justify-center text-center">
-                <div className="flex flex-col items-center mb-8">
-                  <div className="text-center">
-                    <TrueFocus 
-                      sentence="Avaliação Nutricional"
-                      manualMode={false}
-                      blurAmount={5}
-                      borderColor="orange"
-                      animationDuration={2}
-                      pauseBetweenAnimations={1}
-                    />
-                  </div>
+              <div className="text-center mb-12">
+                {/* Título principal redesenhado */}
+                <div className="relative inline-block mb-8">
+                  <h1 className={`text-4xl md:text-5xl font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                    <span className="bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent">
+                      Avaliação
+                    </span>{' '}
+                    <span className={isDarkMode ? 'text-white' : 'text-gray-800'}>
+                      Nutricional
+                    </span>
+                  </h1>
+                  <div className="h-1 w-32 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full mx-auto opacity-80 animate-pulse"></div>
                 </div>
+                
+                <p className={`text-lg mb-8 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'} max-w-2xl mx-auto`}>
+                  Complete sua avaliação nutricional em 4 etapas simples e receba seu plano alimentar personalizado
+                </p>
                 
                 {/* Botão de alternância de tema */}
                 <button 
                   onClick={toggleTheme}
-                  className={`p-2 rounded-lg transition-all duration-300 ease-in-out
-                            hover:scale-110 active:scale-95
+                  className={`p-3 rounded-full transition-all duration-300 ease-in-out
+                            hover:scale-110 active:scale-95 hover:rotate-12
                             ${isDarkMode 
-                              ? 'bg-gray-800 text-orange-400 hover:bg-gray-700' 
-                              : 'bg-white text-orange-500 hover:bg-gray-50'}
-                            shadow-md hover:shadow-lg
-                            border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}
+                              ? 'bg-gray-800/50 text-orange-400 hover:bg-gray-700/50 shadow-lg' 
+                              : 'bg-white/80 text-orange-500 hover:bg-white shadow-lg'}
+                            border ${isDarkMode ? 'border-gray-600/50' : 'border-gray-200/50'}`}
                   aria-label={isDarkMode ? "Ativar modo claro" : "Ativar modo escuro"}
                 >
                   {isDarkMode ? (
-                    <Sun className="h-5 w-5" />
+                    <Sun className="h-5 w-5 transition-transform hover:rotate-180" />
                   ) : (
-                    <Moon className="h-5 w-5" />
+                    <Moon className="h-5 w-5 transition-transform hover:-rotate-12" />
                   )}
                 </button>
               </div>
@@ -701,32 +809,70 @@ export function AvaliacaoNutricionalFeminina() {
                 </div>
               )}
 
-              {/* Progress Steps */}
-              <div className="flex justify-center space-x-4 md:space-x-8 mb-8">
-                {[1, 2, 3, 4].map((step) => (
-                  <div key={step} className="flex flex-col items-center">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 
-                      ${currentStep === step ? themeClasses.stepIndicator.active : 
-                        currentStep > step ? themeClasses.stepIndicator.completed : 
-                        themeClasses.stepIndicator.inactive}`}>
-                      {currentStep > step ? '✓' : step}
-                    </div>
-                    <span className={`text-sm ${
-                      isDarkMode 
-                        ? (currentStep >= step ? 'text-gray-200' : 'text-gray-400')
-                        : (currentStep >= step ? 'text-gray-800' : 'text-gray-600')
-                    }`}>
-                      {step === 1 ? 'Dados Pessoais' :
-                       step === 2 ? 'Saúde' :
-                       step === 3 ? 'Estilo de Vida' :
-                       'Hábitos Alimentares'}
-                    </span>
-                  </div>
-                ))}
+              {/* Progress Steps Modernizado */}
+              <div className="relative mb-12">
+                {/* Linha de conexão */}
+                <div className="absolute top-6 left-0 right-0 h-0.5 bg-gray-200 dark:bg-gray-700 mx-6"></div>
+                <div 
+                  className="absolute top-6 left-6 h-0.5 bg-gradient-to-r from-orange-500 to-orange-600 transition-all duration-500 ease-out"
+                  style={{ width: `calc(${((currentStep - 1) / (4 - 1)) * 100}% - 48px)` }}
+                ></div>
+                
+                <div className="flex items-center justify-between relative">
+                  {[1, 2, 3, 4].map((step) => {
+                    const isCompleted = currentStep > step;
+                    const isActive = currentStep === step;
+                    const stepEmojis = ['👤', '🏥', '🏃‍♀️', '🍽️'];
+                    
+                    return (
+                      <div key={step} className="flex flex-col items-center relative">
+                        <div className={`flex items-center justify-center w-12 h-12 rounded-full mb-3 transition-all duration-300 transform ${
+                          isCompleted 
+                            ? 'bg-gradient-to-r from-green-500 to-green-600 shadow-lg scale-110' 
+                            : isActive 
+                              ? 'bg-gradient-to-r from-orange-500 to-orange-600 shadow-lg scale-110 animate-pulse' 
+                              : isDarkMode 
+                                ? 'bg-gray-700 border-2 border-gray-600' 
+                                : 'bg-white border-2 border-gray-300 shadow-sm'
+                        }`}>
+                          {isCompleted ? (
+                            <CheckCircle className="h-6 w-6 text-white" />
+                          ) : (
+                            <span className="text-lg">{stepEmojis[step - 1]}</span>
+                          )}
+                        </div>
+                        
+                        <div className="text-center">
+                          <span className={`text-xs font-medium block mb-1 ${
+                            isActive 
+                              ? 'text-orange-600 dark:text-orange-400' 
+                              : isCompleted 
+                                ? 'text-green-600 dark:text-green-400'
+                                : isDarkMode ? 'text-gray-400' : 'text-gray-500'
+                          }`}>
+                            Etapa {step}
+                          </span>
+                          <span className={`text-xs text-center leading-tight ${
+                            isActive 
+                              ? 'text-orange-700 dark:text-orange-300 font-medium' 
+                              : isCompleted 
+                                ? 'text-green-700 dark:text-green-300'
+                                : isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                          }`}>
+                            {step === 1 && 'Dados\nPessoais'}
+                            {step === 2 && 'Saúde'}
+                            {step === 3 && 'Estilo de\nVida'}
+                            {step === 4 && 'Hábitos\nAlimentares'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Form Section */}
-              <div className={themeClasses.formSection}>
+              <div className={`${isDarkMode ? 'bg-gray-800/30' : 'bg-white/70'} backdrop-blur-sm rounded-2xl shadow-xl border ${isDarkMode ? 'border-gray-700/50' : 'border-gray-200/50'} p-8`}>
                 <form onSubmit={handleSubmit} className="space-y-8">
                   {loading && (
                     <div className="flex justify-center items-center mb-6">
@@ -740,10 +886,15 @@ export function AvaliacaoNutricionalFeminina() {
 
                   {/* Step 1: Dados Pessoais */}
                   {currentStep === 1 && (
-                    <div className={themeClasses.card}>
-                      <h3 className={`${themeClasses.cardTitle} mb-6`}>
-                        Dados Pessoais
-                      </h3>
+                    <div className={`${isDarkMode ? 'bg-gray-800/50' : 'bg-white/80'} backdrop-blur-sm rounded-xl p-6 shadow-lg border ${isDarkMode ? 'border-gray-700/50' : 'border-white/50'}`}>
+                      <div className="flex items-center mb-6">
+                        <div className={`p-3 rounded-xl ${isDarkMode ? 'bg-pink-500/20' : 'bg-pink-100'} mr-4`}>
+                          <User className={`h-6 w-6 ${isDarkMode ? 'text-pink-400' : 'text-pink-600'}`} />
+                        </div>
+                        <h3 className={`text-2xl font-bold ${themeClasses.text}`}>
+                          Dados Pessoais
+                        </h3>
+                      </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="form-group">
@@ -1008,10 +1159,15 @@ export function AvaliacaoNutricionalFeminina() {
 
                   {/* Step 2: Saúde */}
                   {currentStep === 2 && (
-                    <div className={themeClasses.card}>
-                      <h3 className={`${themeClasses.cardTitle} mb-6`}>
-                        Saúde
-                      </h3>
+                    <div className={`${isDarkMode ? 'bg-gray-800/50' : 'bg-white/80'} backdrop-blur-sm rounded-xl p-6 shadow-lg border ${isDarkMode ? 'border-gray-700/50' : 'border-white/50'}`}>
+                      <div className="flex items-center mb-6">
+                        <div className={`p-3 rounded-xl ${isDarkMode ? 'bg-pink-500/20' : 'bg-pink-100'} mr-4`}>
+                          <Heart className={`h-6 w-6 ${isDarkMode ? 'text-pink-400' : 'text-pink-600'}`} />
+                        </div>
+                        <h3 className={`text-2xl font-bold ${themeClasses.text}`}>
+                          Saúde Feminina
+                        </h3>
+                      </div>
                       
                       <div className="grid grid-cols-1 gap-6">
                         {/* Ciclo Menstrual */}
@@ -1362,10 +1518,15 @@ export function AvaliacaoNutricionalFeminina() {
 
                   {/* Step 3: Estilo de Vida */}
                   {currentStep === 3 && (
-                    <div className={themeClasses.card}>
-                      <h3 className={`${themeClasses.cardTitle} mb-6`}>
-                        Estilo de Vida e Histórico Gestacional
-                      </h3>
+                    <div className={`${isDarkMode ? 'bg-gray-800/50' : 'bg-white/80'} backdrop-blur-sm rounded-xl p-6 shadow-lg border ${isDarkMode ? 'border-gray-700/50' : 'border-white/50'}`}>
+                      <div className="flex items-center mb-6">
+                        <div className={`p-3 rounded-xl ${isDarkMode ? 'bg-pink-500/20' : 'bg-pink-100'} mr-4`}>
+                          <span className="text-2xl">🏃‍♀️</span>
+                        </div>
+                        <h3 className={`text-2xl font-bold ${themeClasses.text}`}>
+                          Estilo de Vida e Histórico Gestacional
+                        </h3>
+                      </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Histórico Gestacional */}
@@ -1786,10 +1947,15 @@ export function AvaliacaoNutricionalFeminina() {
 
                   {/* Step 4: Hábitos Alimentares */}
                   {currentStep === 4 && (
-                    <div className={themeClasses.card}>
-                      <h3 className={`${themeClasses.cardTitle} mb-6`}>
-                        Hábitos Alimentares e Intestinais
-                      </h3>
+                    <div className={`${isDarkMode ? 'bg-gray-800/50' : 'bg-white/80'} backdrop-blur-sm rounded-xl p-6 shadow-lg border ${isDarkMode ? 'border-gray-700/50' : 'border-white/50'}`}>
+                      <div className="flex items-center mb-6">
+                        <div className={`p-3 rounded-xl ${isDarkMode ? 'bg-pink-500/20' : 'bg-pink-100'} mr-4`}>
+                          <span className="text-2xl">🍽️</span>
+                        </div>
+                        <h3 className={`text-2xl font-bold ${themeClasses.text}`}>
+                          Hábitos Alimentares e Intestinais
+                        </h3>
+                      </div>
                       
                       <div className="grid grid-cols-1 gap-6">
                         {/* Hábitos Intestinais */}
@@ -2306,42 +2472,64 @@ Bebidas: 2L de água, 3 cafés"
                     </div>
                   )}
 
-                  {/* Navigation Buttons */}
-                  <div className="flex justify-between mt-8">
+                  {/* Navigation Buttons Modernizados */}
+                  <div className="flex justify-between items-center mt-12 pt-6 border-t border-gray-200/20">
                     {currentStep > 1 && (
                       <button
                         type="button"
                         onClick={prevStep}
-                        className={`${themeClasses.buttonSecondary} px-6 py-2 rounded-lg`}
+                        className={`group flex items-center px-6 py-3 rounded-xl transition-all duration-300 hover:scale-105 ${
+                          isDarkMode 
+                            ? 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50 border border-gray-600' 
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                        }`}
                       >
-                        <ArrowLeft className="h-4 w-4 mr-2 inline" />
+                        <ArrowLeft className="h-4 w-4 mr-2 transition-transform group-hover:-translate-x-1" />
                         Voltar
                       </button>
                     )}
-                    {currentStep < totalSteps && (
+                    {currentStep < 4 && (
                       <button
                         type="button"
                         onClick={nextStep}
-                        className={`${themeClasses.button} px-6 py-2 rounded-lg ml-auto`}
+                        className={`group flex items-center px-6 py-3 rounded-xl transition-all duration-300 hover:scale-105 ml-auto bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg hover:shadow-xl`}
                       >
                         Próximo
+                        <ArrowLeft className="h-4 w-4 ml-2 rotate-180 transition-transform group-hover:translate-x-1" />
                       </button>
                     )}
-                    {currentStep === totalSteps && (
-                      <button
-                        type="submit"
-                        className={`${themeClasses.button} px-6 py-2 rounded-lg ml-auto`}
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <div className="flex items-center">
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Enviando...
-                          </div>
-                        ) : (
-                          'Enviar Avaliação'
-                        )}
-                      </button>
+                    {currentStep === 4 && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={confirmStep4}
+                          className={`group flex items-center px-6 py-3 rounded-xl transition-all duration-300 hover:scale-105 ${
+                            isDarkMode 
+                              ? 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50 border border-gray-600' 
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                          }`}
+                        >
+                          <ArrowLeft className="h-4 w-4 mr-2 transition-transform group-hover:-translate-x-1" />
+                          Revisar
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={loading}
+                          className={`group flex items-center px-8 py-3 rounded-xl transition-all duration-300 hover:scale-105 bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          {loading ? (
+                            <span className="flex items-center">
+                              <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />
+                              Enviando...
+                            </span>
+                          ) : (
+                            <>
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Enviar Formulário
+                            </>
+                          )}
+                        </button>
+                      </>
                     )}
                   </div>
                 </form>
@@ -2351,36 +2539,37 @@ Bebidas: 2L de água, 3 cafés"
         </div>
       </div>
 
-      {/* Modal de Confirmação */}
+      {/* Modal de confirmação modernizado - igual ao masculino */}
       {showConfirmationMessage && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`${themeClasses.card} max-w-md w-full`}>
-            <h3 className={`${themeClasses.cardTitle} mb-4`}>
-              Confirmar Envio
-            </h3>
-            <p className={`${themeClasses.textSecondary} mb-6`}>
-              Você está prestes a enviar sua avaliação nutricional. Tem certeza que deseja continuar?
-            </p>
-            <div className="flex justify-end space-x-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
+          <div className={`${isDarkMode ? 'bg-gray-800/90' : 'bg-white/90'} backdrop-blur-md rounded-2xl p-8 max-w-md w-full mx-4 border ${isDarkMode ? 'border-orange-500/30' : 'border-orange-200'} shadow-2xl animate-scaleIn`}>
+            <div className="text-center mb-6">
+              <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-full p-4 w-16 h-16 mx-auto mb-4">
+                <CheckCircle className="h-8 w-8 text-white" />
+              </div>
+              <h3 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'} mb-2`}>
+                Confirmar Envio
+              </h3>
+              <p className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} leading-relaxed`}>
+                Tem certeza que deseja enviar o formulário? Verifique se todas as informações estão corretas.
+              </p>
+            </div>
+            <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirmationMessage(false)}
-                className={`${themeClasses.buttonSecondary} px-4 py-2 rounded-lg`}
+                className={`flex-1 px-6 py-3 rounded-xl transition-all duration-300 hover:scale-105 ${
+                  isDarkMode 
+                    ? 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50 border border-gray-600' 
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                }`}
               >
                 Cancelar
               </button>
               <button
-                onClick={confirmStep4}
-                className={`${themeClasses.button} px-4 py-2 rounded-lg`}
-                disabled={loading}
+                onClick={handleSubmit}
+                className="flex-1 px-6 py-3 rounded-xl transition-all duration-300 hover:scale-105 bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg hover:shadow-xl"
               >
-                {loading ? (
-                  <div className="flex items-center">
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Enviando...
-                  </div>
-                ) : (
-                  'Confirmar'
-                )}
+                Confirmar
               </button>
             </div>
           </div>

@@ -3,8 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { AvaliacaoFisica } from './pages/AvaliacaoFisica';
-import { AvaliacaoNutricionalFeminina } from './pages/AvaliacaoNutricionalFeminina';
-import { AvaliacaoNutricionalMasculina } from './pages/AvaliacaoNutricionalMasculina';
+import { AvaliacaoNutricionalFeminina, AvaliacaoNutricionalMasculina } from './pages/avaliacao-nutricional';
 import { Resultados } from './pages/Resultados';
 import { Cadastro } from './pages/Cadastro';
 import { RedefinirSenha } from './pages/RedefinirSenha';
@@ -14,6 +13,8 @@ import { ResultadoNutricional } from './pages/ResultadoNutricional';
 import { PrivateRoute } from './components/PrivateRoute';
 import { ProtectedFormRoute } from './routes/ProtectedFormRoute';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { AdminDashboard } from './pages/admin/Dashboard';
+import { PreparadorDashboard } from './pages/preparador/Dashboard';
 import './styles/global.css';
 
 // Verificar se os componentes estão sendo importados corretamente

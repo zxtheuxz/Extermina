@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { Activity, Users, FileText, ArrowRight, Heart, Sparkles, ClipboardCheck, Scale, AlertTriangle, Utensils, CheckCircle, ClipboardList, BarChart, Download } from 'lucide-react';
+import { Activity, Users, FileText, ArrowRight, Heart, Sparkles, ClipboardCheck, Scale, AlertTriangle, Utensils, CheckCircle, ClipboardList, BarChart, Download, TrendingUp, Target } from 'lucide-react';
 import '../styles/global.css';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
@@ -20,6 +20,7 @@ interface Perfil {
   liberado?: string; // 'sim' ou 'nao'
   resultado_fisica?: string; // Texto com o resultado da programação física
   resultado_nutricional?: string; // Texto com o resultado da programação nutricional
+  role?: string; // 'cliente', 'preparador' ou 'admin'
 }
 
 // Adicione essa interface para o evento beforeinstallprompt logo no início do arquivo, após as outras interfaces
@@ -36,6 +37,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
+  const [roleChecked, setRoleChecked] = useState(false);
   const [programacoes, setProgramacoes] = useState({
     fisica: false,
     nutricional: false
@@ -53,74 +55,9 @@ export function Dashboard() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallButton, setShowInstallButton] = useState(false);
 
-  // Adicionar um log para depuração
-  useEffect(() => {
-    console.log('Dashboard renderizado');
-    console.log('Tema atual:', theme);
-    console.log('Usuário:', user);
-    console.log('Perfil:', perfil);
-    console.log('Botão de instalação visível:', showInstallButton);
-    console.log('Evento deferredPrompt disponível:', deferredPrompt ? 'Sim' : 'Não');
-    
-    // Garantir que o conteúdo seja visível
-    const dashboardContainer = document.querySelector('.dashboard-container');
-    if (dashboardContainer) {
-      (dashboardContainer as HTMLElement).style.display = 'block';
-      (dashboardContainer as HTMLElement).style.visibility = 'visible';
-      (dashboardContainer as HTMLElement).style.opacity = '1';
-    }
-  }, [theme, user, perfil, showInstallButton, deferredPrompt]);
 
-  // Atualize o estilo da scrollbar dinamicamente
-  useEffect(() => {
-    const style = document.createElement('style');
-    style.textContent = isDarkMode
-      ? `::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.2); }`
-      : `::-webkit-scrollbar-thumb { background-color: rgba(0, 0, 0, 0.2); }`;
-    document.head.appendChild(style);
-    return () => style.remove();
-  }, [isDarkMode]);
 
-  // Modifique o efeito de aplicação do background
-  useEffect(() => {
-    // Aplicar um background mais suave para o tema claro
-    const applyBackground = () => {
-      if (isDarkMode) {
-        document.documentElement.style.background = 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)';
-        document.body.style.backgroundImage = "url(\"data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%234f46e5' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E\")";
-      } else {
-        document.documentElement.style.background = 'linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%)';
-        document.body.style.backgroundImage = "url(\"data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%234f46e5' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E\")";
-      }
-      
-      // Adicionar um estilo global para garantir que o conteúdo seja visível
-      const style = document.createElement('style');
-      style.textContent = `
-        .dashboard-container {
-          background-color: ${isDarkMode ? 'var(--brand-bg)' : 'var(--brand-bg)'};
-          color: ${isDarkMode ? 'var(--brand-text)' : 'var(--brand-text)'};
-          display: block !important;
-          min-height: 100vh;
-          width: 100%;
-          visibility: visible !important;
-          opacity: 1 !important;
-        }
-        
-        .dashboard-card {
-          background-color: ${isDarkMode ? 'var(--brand-card-bg)' : 'var(--brand-card-bg)'};
-          border-color: ${isDarkMode ? 'var(--brand-card-border)' : 'var(--brand-card-border)'};
-          display: block !important;
-          visibility: visible !important;
-          opacity: 1 !important;
-        }
-      `;
-      document.head.appendChild(style);
-      
-      return () => style.remove();
-    };
-    
-    applyBackground();
-  }, [isDarkMode]);
+
 
   // Efeito principal para carregar dados do usuário
   useEffect(() => {
@@ -134,10 +71,10 @@ export function Dashboard() {
         if (user) {
           console.log("Usuário autenticado:", user.id);
 
-          // Buscar o perfil do usuário para obter o sexo e nome completo
+          // Buscar o perfil do usuário para obter o sexo, nome completo e role
           const { data: perfilData, error: perfilError } = await supabase
             .from('perfis')
-            .select('sexo, nome_completo, liberado, resultado_fisica, resultado_nutricional')
+            .select('sexo, nome_completo, liberado, resultado_fisica, resultado_nutricional, role')
             .eq('user_id', user.id)
             .single();
 
@@ -149,7 +86,21 @@ export function Dashboard() {
             console.log('Sexo do usuário:', perfilData?.sexo);
             console.log('Tipo do sexo:', typeof perfilData?.sexo);
             console.log('Status de liberação:', perfilData?.liberado);
+            console.log('Role do usuário:', perfilData?.role);
             setPerfil(perfilData);
+            
+            // Verificar se é admin ou preparador e redirecionar
+            if (perfilData?.role === 'admin') {
+              console.log('Usuário é admin, redirecionando...');
+              navigate('/admin/dashboard');
+              return;
+            } else if (perfilData?.role === 'preparador') {
+              console.log('Usuário é preparador, redirecionando...');
+              navigate('/preparador/dashboard');
+              return;
+            }
+            
+            setRoleChecked(true);
             
             // Definir corretamente o estado de liberação do perfil
             if (perfilData?.liberado && typeof perfilData.liberado === 'string') {
@@ -459,10 +410,10 @@ export function Dashboard() {
     
     if (perfil?.sexo?.toLowerCase() === 'feminino') {
       console.log('Redirecionando para formulário feminino');
-      return '/programacao-nutricional/feminino';
+      return '/avaliacao-nutricional/feminino';
     } else if (perfil?.sexo?.toLowerCase() === 'masculino') {
       console.log('Redirecionando para formulário masculino');
-      return '/programacao-nutricional/masculino';
+      return '/avaliacao-nutricional/masculino';
     } else {
       console.log('Sexo não definido, redirecionando para configurações');
       setError('Por favor, configure seu perfil com o sexo antes de prosseguir.');
@@ -470,9 +421,11 @@ export function Dashboard() {
     }
   };
 
-  if (loading) {
+  if (loading || !roleChecked) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-900">
+      <div className={`flex items-center justify-center min-h-screen ${
+        isDarkMode ? 'bg-black' : 'bg-gray-50'
+      }`}>
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
       </div>
     );
@@ -480,16 +433,34 @@ export function Dashboard() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-theme">
-        <div className="text-center max-w-md p-6 card shadow-theme-md">
-          <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
-            <AlertTriangle className="h-8 w-8 text-red-500" />
+      <div className={`flex items-center justify-center min-h-screen ${
+        isDarkMode ? 'bg-black' : 'bg-gray-50'
+      }`}>
+        <div className={`text-center max-w-md p-6 rounded-2xl shadow-xl ${
+          isDarkMode 
+            ? 'bg-gray-900 border-gray-700' 
+            : 'bg-white border-gray-200'
+        } border`}>
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+            isDarkMode ? 'bg-red-900/30' : 'bg-red-100'
+          }`}>
+            <AlertTriangle className={`h-8 w-8 ${
+              isDarkMode ? 'text-red-400' : 'text-red-500'
+            }`} />
           </div>
-          <h2 className="text-xl font-bold text-theme mb-2">Erro</h2>
-          <p className="text-theme-secondary mb-4">{error}</p>
+          <h2 className={`text-xl font-bold mb-2 ${
+            isDarkMode ? 'text-white' : 'text-gray-900'
+          }`}>
+            Erro
+          </h2>
+          <p className={`mb-4 ${
+            isDarkMode ? 'text-gray-400' : 'text-gray-600'
+          }`}>
+            {error}
+          </p>
           <button 
             onClick={() => navigate('/login')}
-            className="btn btn-primary"
+            className="w-full py-3 px-6 rounded-xl font-bold bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white transition-all duration-200"
           >
             Voltar para o Login
           </button>
@@ -500,21 +471,30 @@ export function Dashboard() {
 
   return (
     <Layout>
-      <div className={`min-h-screen ${getThemeClass(isDarkMode, 'background')} px-4 py-8`}>
+      <div className={`min-h-screen ${
+        isDarkMode ? 'bg-black' : 'bg-gray-50'
+      } px-4 py-8`}>
+        
         <div className="max-w-7xl mx-auto">
-          {/* Banner de instalação do app - visível especialmente em mobile */}
+          {/* Banner de instalação do app */}
           {showInstallButton && (
-            <div className="mb-6 p-3 md:p-4 bg-indigo-600 dark:bg-indigo-500 rounded-lg shadow-lg animate-pulse-slow">
+            <div className={`mb-8 p-4 rounded-2xl shadow-lg border ${
+              isDarkMode 
+                ? 'bg-gray-900 border-gray-700' 
+                : 'bg-white border-gray-200'
+            }`}>
               <div className="flex flex-col md:flex-row md:justify-between items-center">
-                <div className="flex items-center justify-center mb-3 md:mb-0">
-                  <Download className="h-6 w-6 md:h-5 md:w-5 text-white mr-2" />
-                  <p className="text-sm md:text-base font-medium text-white">
+                <div className="flex items-center mb-3 md:mb-0">
+                  <Download className="h-5 w-5 text-orange-500 mr-3" />
+                  <p className={`font-medium ${
+                    isDarkMode ? 'text-white' : 'text-gray-900'
+                  }`}>
                     Instale o app para uma experiência melhor
                   </p>
                 </div>
                 <button
                   onClick={installPWA}
-                  className="w-full md:w-auto py-2 px-4 rounded-lg text-sm font-medium text-indigo-600 bg-white hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
+                  className="w-full md:w-auto py-2 px-4 rounded-xl font-medium bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white transition-all duration-200"
                 >
                   Instalar App
                 </button>
@@ -523,171 +503,255 @@ export function Dashboard() {
           )}
           
           {sucesso ? (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fadeIn">
-              <div className={`${isDarkMode ? 'bg-green-900/30' : 'bg-green-100'} rounded-full p-6 mb-6`}>
-                <CheckCircle className={`h-16 w-16 ${isDarkMode ? 'text-green-400' : 'text-green-500'}`} />
+            <div className="flex flex-col items-center justify-center min-h-[60vh]">
+              <div className={`rounded-full p-6 mb-6 ${
+                isDarkMode ? 'bg-green-900/30' : 'bg-green-100'
+              }`}>
+                <CheckCircle className={`h-16 w-16 ${
+                  isDarkMode ? 'text-green-400' : 'text-green-500'
+                }`} />
               </div>
-              <h2 className={`text-2xl md:text-3xl font-bold mb-4 text-center ${getThemeClass(isDarkMode, 'text')}`}>
-                Programação Nutricional Enviada com Sucesso!
+              <h2 className={`text-3xl font-bold mb-4 text-center ${
+                isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>
+                Programação Nutricional Enviada
               </h2>
-              <p className={`${getThemeClass(isDarkMode, 'textSecondary')} text-center max-w-md mb-8 text-lg`}>
+              <p className={`text-center max-w-md mb-8 text-lg ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}>
                 Sua programação foi recebida e está sendo analisada por nossos especialistas.
               </p>
               <button
                 onClick={() => navigate('/dashboard')}
-                className={`${getThemeClass(isDarkMode, 'button')} px-6 py-3 rounded-lg font-semibold`}
+                className="px-6 py-3 rounded-xl font-semibold bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white transition-all duration-200"
               >
                 Voltar para o Dashboard
               </button>
             </div>
           ) : (
             <>
+              {/* Header */}
               <div className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center">
                 <div className="w-full md:w-auto mb-4 md:mb-0">
-                  <h1 className={`text-2xl md:text-3xl font-bold ${getThemeClass(isDarkMode, 'text')} mb-2`}>
-                    Bem-vindo(a), {getNomeExibicao()}!
+                  <h1 className={`text-4xl font-bold mb-2 ${
+                    isDarkMode ? 'text-white' : 'text-gray-900'
+                  }`}>
+                    Bem-vindo, {getNomeExibicao()}
                   </h1>
-                  <p className={`text-sm md:text-base ${getThemeClass(isDarkMode, 'textSecondary')}`}>
-                    Complete suas programações para receber seu plano personalizado.
+                  <p className={`text-lg ${
+                    isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
+                    Sua jornada de transformação está acontecendo
                   </p>
                 </div>
-                <div className="flex space-x-4 w-full md:w-auto justify-start">
-                  <Link to="/programacoes" className="pb-2 md:pb-4 px-1 text-sm md:text-base text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-500 font-medium flex items-center gap-2">
+                <div className="flex space-x-6 w-full md:w-auto justify-start">
+                  <Link 
+                    to="/programacoes" 
+                    className={`pb-4 px-1 border-b-2 border-orange-500 font-medium flex items-center gap-2 transition-all ${
+                      isDarkMode ? 'text-orange-400' : 'text-orange-600'
+                    }`}
+                  >
                     <ClipboardList size={20} />
                     <span>Programações</span>
                   </Link>
-                  <Link to="/resultados" className="pb-2 md:pb-4 px-1 text-sm md:text-base text-indigo-500/70 dark:text-indigo-400/70 hover:text-indigo-600 dark:hover:text-indigo-300 flex items-center gap-2">
+                  <Link 
+                    to="/resultados" 
+                    className={`pb-4 px-1 font-medium flex items-center gap-2 transition-all hover:${
+                      isDarkMode ? 'text-orange-400' : 'text-orange-600'
+                    } ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}
+                  >
                     <BarChart size={20} />
                     <span>Resultados</span>
                   </Link>
                 </div>
               </div>
               
-              {/* Aviso de formulários completos */}
+              {/* Status Cards */}
               {mostrarAviso && (
-                <div className={`mb-6 p-3 md:p-4 ${isDarkMode ? 'bg-indigo-900/30 border-indigo-500' : 'bg-indigo-100 border-indigo-600'} border-l-4 rounded-lg flex flex-col md:flex-row md:items-start animate-slideIn`}>
-                  <div className={`${isDarkMode ? 'bg-indigo-500' : 'bg-indigo-600'} rounded-full p-1 mr-3 mt-0.5 hidden md:block`}>
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className={`text-base md:text-lg font-medium ${isDarkMode ? 'text-indigo-400' : 'text-indigo-700'}`}>Parabéns!</h3>
-                    <p className={`text-sm md:text-base ${isDarkMode ? 'text-indigo-200' : 'text-indigo-900'}`}>
-                      Você completou todas as programações necessárias. Seus resultados e planos personalizados estão disponíveis na aba Resultados.
-                    </p>
-                    <div className="mt-3">
+                <div className={`mb-8 p-6 rounded-2xl shadow-lg border ${
+                  isDarkMode 
+                    ? 'bg-green-900/20 border-green-500/30' 
+                    : 'bg-green-50 border-green-200'
+                }`}>
+                  <div className="flex items-start">
+                    <div className={`rounded-full p-2 mr-4 ${
+                      isDarkMode ? 'bg-green-500' : 'bg-green-600'
+                    }`}>
+                      <CheckCircle className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className={`text-xl font-bold mb-2 ${
+                        isDarkMode ? 'text-green-400' : 'text-green-700'
+                      }`}>
+                        Programações Concluídas
+                      </h3>
+                      <p className={`mb-4 ${
+                        isDarkMode ? 'text-green-200' : 'text-green-800'
+                      }`}>
+                        Você completou todas as programações necessárias. Seus resultados personalizados estão prontos para download.
+                      </p>
                       <button 
-                        onClick={irParaResultados}
-                        className="inline-flex items-center px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm animate-pulse-slow"
+                        onClick={() => navigate('/resultados')}
+                        className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl transition-all duration-200 font-medium"
                       >
-                        Ver meus resultados
-                        <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                        </svg>
+                        Ver Resultados
+                        <ArrowRight className="ml-2 w-4 h-4" />
                       </button>
                     </div>
                   </div>
                 </div>
               )}
               
-              {/* Aviso de formulários completos mas perfil não liberado */}
               {formulariosCompletos && !perfilLiberado && (
-                <div className="mb-6 p-3 md:p-4 bg-yellow-900/30 border-l-4 border-yellow-500 rounded-lg flex flex-col md:flex-row md:items-start animate-slideIn">
-                  <div className="bg-yellow-500 rounded-full p-1 mr-3 mt-0.5 hidden md:block">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="text-base md:text-lg font-medium text-yellow-400">Programações em análise</h3>
-                    <p className="text-sm md:text-base text-yellow-200">
-                      Você completou todas as programações necessárias. Seus resultados estão sendo analisados pela nossa equipe e estarão disponíveis em breve.
-                    </p>
+                <div className={`mb-8 p-6 rounded-2xl shadow-lg border ${
+                  isDarkMode 
+                    ? 'bg-yellow-900/20 border-yellow-500/30' 
+                    : 'bg-yellow-50 border-yellow-200'
+                }`}>
+                  <div className="flex items-start">
+                    <div className={`rounded-full p-2 mr-4 ${
+                      isDarkMode ? 'bg-yellow-500' : 'bg-yellow-600'
+                    }`}>
+                      <Target className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className={`text-xl font-bold mb-2 ${
+                        isDarkMode ? 'text-yellow-400' : 'text-yellow-700'
+                      }`}>
+                        Programações em Análise
+                      </h3>
+                      <p className={`${
+                        isDarkMode ? 'text-yellow-200' : 'text-yellow-800'
+                      }`}>
+                        Você completou todas as programações. Nossa equipe está analisando seus dados para criar o plano perfeito.
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
               
-              {/* Cards de programação */}
-              <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2">
-                <div className={`card overflow-hidden rounded-xl shadow-lg ${isDarkMode ? 'bg-purple-900/15 border-purple-900/20' : 'bg-purple-50 border-purple-100'} border`}>
-                  <div className="p-6">
-                    <div className="flex items-center mb-4">
-                      <div className={`w-12 h-12 rounded-full bg-purple-600 flex items-center justify-center mr-4`}>
-                        <Activity className="h-6 w-6 text-white" />
+              {/* Main Cards */}
+              <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+                {/* Card Programação Física */}
+                <div className={`rounded-2xl shadow-lg border transition-all duration-200 hover:shadow-xl ${
+                  isDarkMode 
+                    ? 'bg-gray-900 border-gray-700' 
+                    : 'bg-white border-gray-200'
+                }`}>
+                  <div className="p-8">
+                    <div className="flex items-center mb-6">
+                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 flex items-center justify-center mr-4">
+                        <Activity className="h-7 w-7 text-white" />
                       </div>
-                      <h2 className="text-xl font-bold text-theme">Programação Física</h2>
+                      <div>
+                        <h2 className={`text-2xl font-bold mb-1 ${
+                          isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`}>
+                          Programação Física
+                        </h2>
+                        <p className="text-sm font-medium text-purple-600">
+                          {programacoes.fisica 
+                            ? (perfil?.liberado?.toLowerCase() === 'sim' ? "Treino personalizado pronto" : "Aguardando análise")
+                            : "Avaliação pendente"}
+                        </p>
+                      </div>
                     </div>
                     
-                    <p className="text-theme-secondary mb-6">
+                    <p className={`mb-6 leading-relaxed ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>
                       {programacoes.fisica 
                         ? (perfil?.liberado?.toLowerCase() === 'sim'
-                          ? "Você já completou sua programação física. Os resultados estão disponíveis na aba Resultados."
-                          : "Você já completou sua programação física. Os resultados estão sendo analisados pela nossa equipe.")
-                        : "Complete sua programação física para receber um plano de treino personalizado."}
+                          ? "Sua programação física está pronta. Acesse seus resultados personalizados e baixe seu plano de treino completo."
+                          : "Sua programação física foi enviada com sucesso. Nossa equipe está analisando seus dados para criar o treino perfeito.")
+                        : "Complete sua avaliação física para receber um plano de treino personalizado baseado em seus objetivos e condicionamento atual."}
                     </p>
                     
-                    <div className="flex">
-                      <button 
-                        onClick={() => navigate(programacoes.fisica && perfil?.liberado?.toLowerCase() === 'sim' ? '/resultado-fisico' : '/programacao-fisica')}
-                        className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          programacoes.fisica && perfil?.liberado?.toLowerCase() !== 'sim'
-                            ? 'bg-purple-400 cursor-not-allowed'
-                            : 'bg-purple-600 hover:bg-purple-700'
-                        } text-white`}
-                        disabled={programacoes.fisica && perfil?.liberado?.toLowerCase() !== 'sim'}
-                      >
-                        {programacoes.fisica 
-                          ? (perfil?.liberado?.toLowerCase() === 'sim' ? "Ver Resultados" : "Em análise") 
-                          : "Preencher Programação"}
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </button>
-                    </div>
+                    <button 
+                      onClick={() => navigate(programacoes.fisica && perfil?.liberado?.toLowerCase() === 'sim' ? '/resultado-fisico' : '/avaliacao-fisica')}
+                      className={`inline-flex items-center px-6 py-3 rounded-xl font-medium transition-all duration-200 ${
+                        programacoes.fisica && perfil?.liberado?.toLowerCase() !== 'sim'
+                          ? 'bg-gray-400 cursor-not-allowed text-white'
+                          : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white'
+                      }`}
+                      disabled={programacoes.fisica && perfil?.liberado?.toLowerCase() !== 'sim'}
+                    >
+                      {programacoes.fisica 
+                        ? (perfil?.liberado?.toLowerCase() === 'sim' ? "Ver Treino" : "Em Preparação") 
+                        : "Iniciar Avaliação"}
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </button>
                   </div>
                   
-                  <div className={`px-6 py-3 ${isDarkMode ? 'bg-purple-900/25' : 'bg-purple-100/40'} flex items-center text-sm`}>
-                    <Activity className="h-4 w-4 mr-2" />
+                  <div className={`px-8 py-4 border-t flex items-center text-sm ${
+                    isDarkMode 
+                      ? 'bg-purple-900/10 border-purple-500/20 text-gray-400' 
+                      : 'bg-purple-50 border-purple-200 text-gray-600'
+                  }`}>
+                    <TrendingUp className="h-4 w-4 mr-3 text-purple-600" />
                     <span>Análise corporal e medidas físicas</span>
                   </div>
                 </div>
 
-                <div className={`card overflow-hidden rounded-xl shadow-lg ${isDarkMode ? 'bg-orange-900/15 border-orange-900/20' : 'bg-orange-50 border-orange-100'} border`}>
-                  <div className="p-6">
-                    <div className="flex items-center mb-4">
-                      <div className={`w-12 h-12 rounded-full bg-orange-500 flex items-center justify-center mr-4`}>
-                        <Utensils className="h-6 w-6 text-white" />
+                {/* Card Programação Nutricional */}
+                <div className={`rounded-2xl shadow-lg border transition-all duration-200 hover:shadow-xl ${
+                  isDarkMode 
+                    ? 'bg-gray-900 border-gray-700' 
+                    : 'bg-white border-gray-200'
+                }`}>
+                  <div className="p-8">
+                    <div className="flex items-center mb-6">
+                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-orange-500 to-pink-500 flex items-center justify-center mr-4">
+                        <Utensils className="h-7 w-7 text-white" />
                       </div>
-                      <h2 className="text-xl font-bold text-theme">Programação Nutricional</h2>
+                      <div>
+                        <h2 className={`text-2xl font-bold mb-1 ${
+                          isDarkMode ? 'text-white' : 'text-gray-900'
+                        }`}>
+                          Programação Nutricional
+                        </h2>
+                        <p className="text-sm font-medium text-orange-600">
+                          {programacoes.nutricional 
+                            ? (perfil?.liberado?.toLowerCase() === 'sim' ? "Plano alimentar pronto" : "Aguardando análise")
+                            : "Avaliação pendente"}
+                        </p>
+                      </div>
                     </div>
                     
-                    <p className="text-theme-secondary mb-6">
+                    <p className={`mb-6 leading-relaxed ${
+                      isDarkMode ? 'text-gray-400' : 'text-gray-600'
+                    }`}>
                       {programacoes.nutricional 
                         ? (perfil?.liberado?.toLowerCase() === 'sim'
-                          ? "Você já completou sua programação nutricional. Os resultados estão disponíveis na aba Resultados."
-                          : "Você já completou sua programação nutricional. Os resultados estão sendo analisados pela nossa equipe.")
-                        : "Complete sua programação nutricional para receber um plano alimentar personalizado."}
+                          ? "Sua programação nutricional está pronta. Acesse sua dieta personalizada e baixe seu plano alimentar completo."
+                          : "Sua programação nutricional foi enviada com sucesso. Nossa equipe está criando sua dieta personalizada.")
+                        : "Complete sua avaliação nutricional para receber um plano alimentar personalizado baseado em seus hábitos e objetivos."}
                     </p>
                     
-                    <div className="flex">
-                      <button 
-                        onClick={() => navigate(programacoes.nutricional && perfil?.liberado?.toLowerCase() === 'sim' ? '/resultado-nutricional' : getNutricionalLink())}
-                        className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          programacoes.nutricional && perfil?.liberado?.toLowerCase() !== 'sim'
-                            ? 'bg-orange-400 cursor-not-allowed'
-                            : 'bg-orange-500 hover:bg-orange-600'
-                        } text-white`}
-                        disabled={programacoes.nutricional && perfil?.liberado?.toLowerCase() !== 'sim'}
-                      >
-                        {programacoes.nutricional 
-                          ? (perfil?.liberado?.toLowerCase() === 'sim' ? "Ver Resultados" : "Em análise") 
-                          : "Preencher Programação"}
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </button>
-                    </div>
+                    <button 
+                      onClick={() => navigate(programacoes.nutricional && perfil?.liberado?.toLowerCase() === 'sim' ? '/resultado-nutricional' : getNutricionalLink())}
+                      className={`inline-flex items-center px-6 py-3 rounded-xl font-medium transition-all duration-200 ${
+                        programacoes.nutricional && perfil?.liberado?.toLowerCase() !== 'sim'
+                          ? 'bg-gray-400 cursor-not-allowed text-white'
+                          : 'bg-gradient-to-r from-orange-500 to-pink-500 hover:from-orange-600 hover:to-pink-600 text-white'
+                      }`}
+                      disabled={programacoes.nutricional && perfil?.liberado?.toLowerCase() !== 'sim'}
+                    >
+                      {programacoes.nutricional 
+                        ? (perfil?.liberado?.toLowerCase() === 'sim' ? "Ver Dieta" : "Em Preparação") 
+                        : "Iniciar Avaliação"}
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </button>
                   </div>
                   
-                  <div className={`px-6 py-3 ${isDarkMode ? 'bg-orange-900/25' : 'bg-orange-100/40'} flex items-center text-sm`}>
-                    <Utensils className="h-4 w-4 mr-2" />
+                  <div className={`px-8 py-4 border-t flex items-center text-sm ${
+                    isDarkMode 
+                      ? 'bg-orange-900/10 border-orange-500/20 text-gray-400' 
+                      : 'bg-orange-50 border-orange-200 text-gray-600'
+                  }`}>
+                    <Target className="h-4 w-4 mr-3 text-orange-600" />
                     <span>Hábitos alimentares e objetivos nutricionais</span>
                   </div>
                 </div>

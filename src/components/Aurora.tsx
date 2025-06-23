@@ -144,12 +144,9 @@ export default function Aurora(props: AuroraProps) {
     gl.clearColor(0, 0, 0, 0);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.canvas.style.backgroundColor = '#000000';
-
-    // Garantir que o fundo seja preto
-    document.body.style.backgroundColor = '#000000';
-    document.documentElement.style.backgroundColor = '#000000';
-    ctn.style.backgroundColor = '#000000';
+    
+    // Remover configuração de fundo preto para permitir transparência
+    gl.canvas.style.backgroundColor = 'transparent';
 
     let program: Program;
 

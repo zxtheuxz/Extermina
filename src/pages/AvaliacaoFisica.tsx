@@ -5,7 +5,6 @@ import { ClipboardCheck, AlertCircle, Upload, ArrowLeft, CheckCircle, Activity, 
 import { useTheme } from '../contexts/ThemeContext';
 import { getThemeClass } from '../styles/theme';
 import { Layout } from '../components/Layout';
-import TrueFocus from '../components/TrueFocus';
 
 export function AvaliacaoFisica() {
   console.log('Componente AvaliacaoFisica renderizado');
@@ -54,8 +53,8 @@ export function AvaliacaoFisica() {
     select: getThemeClass(isDarkMode, 'select'),
     label: getThemeClass(isDarkMode, 'label'),
     helperText: getThemeClass(isDarkMode, 'helperText'),
-    radio: getThemeClass(isDarkMode, 'radio'),
-    radioLabel: getThemeClass(isDarkMode, 'radioLabel'),
+    radio: isDarkMode ? 'text-orange-400' : 'text-orange-600',
+    radioLabel: isDarkMode ? 'text-gray-300' : 'text-gray-700',
     errorText: isDarkMode ? 'text-red-400' : 'text-red-600',
     formSection: `${getThemeClass(isDarkMode, 'cardBg')} p-8 rounded-xl border ${getThemeClass(isDarkMode, 'border')} ${getThemeClass(isDarkMode, 'shadow')}`,
     stepIndicatorCompleted: 'bg-green-500 shadow-lg',
@@ -163,6 +162,25 @@ export function AvaliacaoFisica() {
     
     return true;
   };
+
+  useEffect(() => {
+    // Adicionar CSS personalizado para animação dos frangos
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes float {
+        0% { transform: translateX(-100px); opacity: 0; }
+        10% { opacity: ${isDarkMode ? '0.05' : '0.1'}; }
+        90% { opacity: ${isDarkMode ? '0.05' : '0.1'}; }
+        100% { transform: translateX(calc(100vw + 100px)); opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Cleanup: remover o style quando o componente for desmontado
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, [isDarkMode]);
 
   useEffect(() => {
     // Remover qualquer rascunho existente ao carregar o componente
@@ -403,82 +421,140 @@ export function AvaliacaoFisica() {
 
   return (
     <Layout>
-      <div className={`min-h-screen ${themeClasses.background} px-4 py-8`}>
-        <div className="max-w-7xl mx-auto">
-          {/* Botão Voltar para Dashboard */}
-          <button
-            onClick={() => navigate('/dashboard')}
-            className={`flex items-center mb-6 px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors`}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Voltar para Dashboard
-          </button>
+      <div className={`min-h-screen ${themeClasses.background} relative overflow-hidden`}>
+        {/* Background decorativo com frangos animados */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {/* Círculos decorativos originais */}
+          <div className={`absolute -top-40 -right-40 w-80 h-80 rounded-full ${isDarkMode ? 'bg-orange-500/5' : 'bg-orange-100/30'}`}></div>
+          <div className={`absolute -bottom-40 -left-40 w-80 h-80 rounded-full ${isDarkMode ? 'bg-purple-500/5' : 'bg-purple-100/30'}`}></div>
+          
+          {/* Frangos animados bem sutis - Extermina Frango Theme */}
+          <div className="absolute inset-0">
+            {/* Frango 1 - movimento horizontal suave */}
+            <div className={`absolute top-20 -left-12 ${isDarkMode ? 'opacity-5' : 'opacity-10'} animate-pulse`} 
+                 style={{
+                   animation: 'float 25s linear infinite',
+                   transform: 'translateX(-100px)'
+                 }}>
+              <span className="text-4xl filter blur-sm">🐔</span>
+            </div>
+            
+            {/* Frango 2 - movimento mais lento */}
+            <div className={`absolute top-1/3 -left-16 ${isDarkMode ? 'opacity-5' : 'opacity-10'} animate-bounce`}
+                 style={{
+                   animation: 'float 35s linear infinite 8s',
+                   animationDelay: '5s'
+                 }}>
+              <span className="text-3xl filter blur-sm">🐓</span>
+            </div>
+            
+            {/* Frango 3 - posição diferente */}
+            <div className={`absolute bottom-40 -left-10 ${isDarkMode ? 'opacity-5' : 'opacity-10'}`}
+                 style={{
+                   animation: 'float 30s linear infinite 10s'
+                 }}>
+              <span className="text-4xl filter blur-sm">🐔</span>
+            </div>
+            
+            {/* Frango 4 - bem sutil no canto */}
+            <div className={`absolute top-1/2 -left-20 ${isDarkMode ? 'opacity-3' : 'opacity-8'}`}
+                 style={{
+                   animation: 'float 45s linear infinite 20s'
+                 }}>
+              <span className="text-2xl filter blur-sm">🐓</span>
+            </div>
+          </div>
+        </div>
+        
+
+        
+        <div className="relative z-10 max-w-4xl mx-auto px-4 py-6">
+          {/* Header melhorado */}
+          <div className="mb-8">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className={`group flex items-center mb-6 px-4 py-2 rounded-xl transition-all duration-300 hover:scale-105 ${
+                isDarkMode 
+                  ? 'bg-gray-800/50 text-gray-300 hover:bg-gray-700/50 border border-gray-700' 
+                  : 'bg-white/80 text-gray-600 hover:bg-white shadow-sm border border-gray-200'
+              }`}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2 transition-transform group-hover:-translate-x-1" />
+              Voltar para Dashboard
+            </button>
+          </div>
 
           {formSubmitted ? (
             <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fadeIn">
-              <div className="bg-orange-600/20 rounded-full p-6 mb-6 shadow-lg">
-                <CheckCircle className="h-16 w-16 text-orange-500" />
+              <div className="relative mb-8">
+                <div className="absolute inset-0 animate-ping bg-orange-500 rounded-full opacity-20"></div>
+                <div className="relative bg-gradient-to-r from-orange-500 to-orange-600 rounded-full p-8 shadow-2xl">
+                  <CheckCircle className="h-20 w-20 text-white" />
+                </div>
               </div>
-              <h2 className={`text-2xl md:text-3xl font-bold mb-4 text-center ${themeClasses.text}`}>
-                Avaliação Física Enviada com Sucesso!
-              </h2>
-              <p className={`text-center max-w-md mb-8 ${themeClasses.textSecondary}`}>
-                Sua avaliação foi recebida e está sendo analisada por nossos especialistas. 
-                Em breve você receberá seu plano de treino personalizado.
-              </p>
+              
+              <div className="text-center max-w-2xl">
+                <h2 className={`text-3xl md:text-4xl font-bold mb-6 bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent`}>
+                  Avaliação Física Enviada!
+                </h2>
+                <div className={`space-y-4 text-lg ${themeClasses.textSecondary}`}>
+                  <p>🎉 Parabéns! Sua avaliação foi recebida com sucesso.</p>
+                  <p>⚡ Nossa equipe de especialistas está analisando seus dados.</p>
+                  <p>💪 Em breve você receberá seu plano de treino personalizado!</p>
+                </div>
+              </div>
+              
               <button
                 onClick={() => navigate('/dashboard')}
-                className={themeClasses.button}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  borderRadius: '0.5rem',
-                  fontWeight: 'bold',
-                  transition: 'all 0.3s ease',
-                  border: 'none',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                className="mt-8 group relative px-8 py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 overflow-hidden"
               >
-                Voltar para o Dashboard
+                <span className="relative z-10 flex items-center">
+                  <ArrowLeft className="h-5 w-5 mr-2 transition-transform group-hover:-translate-x-1" />
+                  Voltar para o Dashboard
+                </span>
+                <div className="absolute inset-0 bg-gradient-to-r from-orange-600 to-orange-700 opacity-0 group-hover:opacity-100 transition-opacity"></div>
               </button>
             </div>
           ) : (
             <>
-              <div className="mb-12 flex flex-col items-center justify-center text-center">
-                <div className="flex flex-col items-center mb-8">
-                  <div className="text-center">
-                    <TrueFocus 
-                      sentence="Avaliação Física"
-                      manualMode={false}
-                      blurAmount={5}
-                      borderColor="orange"
-                      animationDuration={2}
-                      pauseBetweenAnimations={1}
-                    />
-                  </div>
-                </div>
+            <div className="text-center mb-12">
+              {/* Título principal redesenhado */}
+              <div className="relative mb-8">
+                <h1 className="relative text-4xl md:text-5xl font-bold mb-4">
+                  <span className="bg-gradient-to-r from-orange-500 via-orange-600 to-orange-700 bg-clip-text text-transparent">
+                    Avaliação
+                  </span>
+                  <span className={`ml-3 ${themeClasses.text}`}>
+                    Física
+                  </span>
+                  {/* Sublinhado animado */}
+                  <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-24 h-1 bg-gradient-to-r from-orange-400 to-orange-600 rounded-full animate-pulse"></div>
+                </h1>
                 
-                {/* Botão de alternância de tema */}
+                <p className={`text-lg ${themeClasses.textSecondary} max-w-md mx-auto`}>
+                  Monte seu perfil fitness completo em 3 etapas simples
+                </p>
+              </div>
+              
+              {/* Botão de tema reposicionado */}
+              <div className="flex justify-center mb-8">
                 <button 
                   onClick={toggleTheme}
-                  className={`p-2 rounded-lg transition-all duration-300 ease-in-out
-                            hover:scale-110 active:scale-95
-                            ${isDarkMode 
-                              ? 'bg-indigo-800/50 text-yellow-400 hover:bg-indigo-700/50' 
-                              : 'bg-white/80 text-indigo-600 hover:bg-blue-50'}
-                            shadow-md hover:shadow-lg
-                            border ${isDarkMode ? 'border-indigo-700' : 'border-blue-200'}`}
+                  className={`group p-3 rounded-full transition-all duration-300 hover:scale-110 active:scale-95 ${
+                    isDarkMode 
+                      ? 'bg-gray-800/80 text-yellow-400 hover:bg-gray-700/80 border border-gray-600 shadow-lg' 
+                      : 'bg-white/90 text-indigo-600 hover:bg-white shadow-lg border border-gray-200'
+                  }`}
                   aria-label={isDarkMode ? "Ativar modo claro" : "Ativar modo escuro"}
                 >
                   {isDarkMode ? (
-                    <Sun className="h-5 w-5" />
+                    <Sun className="h-5 w-5 transition-transform group-hover:rotate-180" />
                   ) : (
-                    <Moon className="h-5 w-5" />
+                    <Moon className="h-5 w-5 transition-transform group-hover:rotate-12" />
                   )}
                 </button>
               </div>
+            </div>
 
               {erro && (
                 <div className={`${isDarkMode ? 'bg-red-900/30 border-red-500' : 'bg-red-50 border-red-400'} border-l-4 p-4 rounded-lg mb-6`}>
@@ -490,36 +566,57 @@ export function AvaliacaoFisica() {
               )}
 
               <form onSubmit={handleSubmit} className="space-y-8">
-                {/* Progress Steps */}
-                <div className="flex items-center justify-between mb-8">
-                    {Array.from({ length: totalSteps }).map((_, index) => (
-                    <div 
-                      key={index} 
-                      className="flex flex-col items-center"
-                    >
-                      <div className={`flex items-center justify-center w-10 h-10 rounded-full mb-2 transition-all
-                        ${currentStep > index + 1 
-                          ? themeClasses.stepIndicatorCompleted
-                          : currentStep === index + 1 
-                            ? themeClasses.stepIndicatorActive 
-                            : themeClasses.stepIndicatorInactive}`}
-                      >
-                          {currentStep > index + 1 ? (
-                          <CheckCircle className="h-5 w-5 text-white" />
-                          ) : (
-                          <span className="text-white font-medium">{index + 1}</span>
-                          )}
+                {/* Progress Steps - Design Melhorado */}
+                <div className="relative mb-12">
+                  {/* Linha de conexão */}
+                  <div className="absolute top-6 left-0 right-0 h-0.5 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 dark:from-gray-700 dark:via-gray-600 dark:to-gray-700"></div>
+                  
+                  <div className="flex items-center justify-between relative z-10">
+                    {Array.from({ length: totalSteps }).map((_, index) => {
+                      const stepNumber = index + 1;
+                      const isCompleted = currentStep > stepNumber;
+                      const isActive = currentStep === stepNumber;
+                      const stepInfo = [
+                        { title: 'Informações Básicas', icon: '👤', description: 'Dados pessoais' },
+                        { title: 'Experiência', icon: '💪', description: 'Histórico fitness' },
+                        { title: 'Saúde', icon: '🏥', description: 'Condições médicas' }
+                      ][index];
+                      
+                      return (
+                        <div key={index} className="flex flex-col items-center max-w-xs">
+                          <div className={`relative flex items-center justify-center w-12 h-12 rounded-full mb-3 transition-all duration-500 ${
+                            isCompleted 
+                              ? 'bg-green-500 shadow-lg shadow-green-500/30 scale-110' 
+                              : isActive 
+                                ? 'bg-gradient-to-r from-orange-500 to-orange-600 shadow-lg shadow-orange-500/30 scale-110' 
+                                : isDarkMode ? 'bg-gray-700 border-2 border-gray-600' : 'bg-gray-100 border-2 border-gray-300'
+                          }`}>
+                            {isCompleted ? (
+                              <CheckCircle className="h-6 w-6 text-white animate-pulse" />
+                            ) : (
+                              <span className={`text-lg ${isActive ? 'text-white font-bold' : isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {stepInfo.icon}
+                              </span>
+                            )}
+                            {isActive && (
+                              <div className="absolute -inset-1 bg-gradient-to-r from-orange-400 to-orange-600 rounded-full blur opacity-60 animate-pulse"></div>
+                            )}
+                          </div>
+                          
+                          <div className="text-center">
+                            <h3 className={`text-sm font-semibold mb-1 ${
+                              isActive ? themeClasses.text : themeClasses.textSecondary
+                            }`}>
+                              {stepInfo.title}
+                            </h3>
+                            <p className={`text-xs ${themeClasses.textSecondary}`}>
+                              {stepInfo.description}
+                            </p>
+                          </div>
                         </div>
-                      <span className={`text-sm font-medium ${
-                        currentStep === index + 1 
-                          ? themeClasses.text 
-                          : themeClasses.textSecondary
-                      }`}>
-                          {index === 0 ? 'Informações Básicas' : 
-                           index === 1 ? 'Experiência' : 'Saúde'}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Step 1: Informações Básicas */}

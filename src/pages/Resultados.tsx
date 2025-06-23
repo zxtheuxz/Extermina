@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { ClipboardCheck, Scale, ArrowLeft, Loader2, Download, Clock, Sun, Moon, FileText, Activity, Heart, Play, X, Calendar, TrendingUp, Award, Bell } from 'lucide-react';
+import { ClipboardCheck, Scale, ArrowLeft, Loader2, Download, Clock, Sun, Moon, FileText, Activity, Heart, Play, X, Calendar, TrendingUp, Award, Bell, User, BarChart3, Lock } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { Layout } from '../components/Layout';
@@ -12,79 +12,50 @@ import { extrairNomeExercicio, encontrarVideoDoExercicio } from '../utils/exerci
 import { BotaoMetodoTreino } from '../components/BotaoMetodoTreino';
 import { formatarMetodoPDF } from '../utils/metodosTreino';
 
-// Adicione estas classes ao seu arquivo de estilos globais ou como uma constante
+// Design limpo e profissional
 const themeStyles = {
   light: {
-    background: "bg-gradient-to-b from-gray-100 to-white",
-    text: "text-gray-800",
+    background: "bg-gray-50",
+    text: "text-gray-900",
     textSecondary: "text-gray-600",
-    card: "bg-white shadow-lg border border-gray-200",
-    button: "bg-orange-500 hover:bg-orange-600 text-white",
-    buttonSecondary: "bg-gray-200 hover:bg-gray-300 text-gray-800",
-    input: "bg-white border border-gray-300 focus:border-orange-500",
+    card: "bg-white shadow-sm border border-gray-200",
+    button: "bg-blue-600 hover:bg-blue-700 text-white",
+    buttonSecondary: "bg-gray-100 hover:bg-gray-200 text-gray-700",
+    input: "bg-white border border-gray-300 focus:border-blue-500",
     scrollbar: {
-      track: "bg-gray-200",
-      thumb: "bg-orange-400/50 hover:bg-orange-400/70"
+      track: "bg-gray-100",
+      thumb: "bg-gray-400 hover:bg-gray-500"
     }
   },
   dark: {
-    background: "bg-gradient-to-b from-slate-900 to-slate-800",
+    background: "bg-gray-900",
     text: "text-white",
     textSecondary: "text-gray-300",
-    card: "bg-slate-800/80 backdrop-blur-sm border border-orange-500/20",
-    button: "bg-orange-500 hover:bg-orange-600 text-white",
-    buttonSecondary: "bg-slate-700 hover:bg-slate-600 text-white",
-    input: "bg-slate-700 border border-slate-600 focus:border-orange-500",
+    card: "bg-gray-800 border border-gray-700",
+    button: "bg-blue-600 hover:bg-blue-700 text-white",
+    buttonSecondary: "bg-gray-700 hover:bg-gray-600 text-gray-200",
+    input: "bg-gray-800 border border-gray-600 focus:border-blue-400",
     scrollbar: {
-      track: "bg-slate-700",
-      thumb: "bg-orange-500/50 hover:bg-orange-500/70"
+      track: "bg-gray-800",
+      thumb: "bg-gray-600 hover:bg-gray-500"
     }
   }
 };
 
-// Adicionar estilos para animações personalizadas
+// Estilos básicos sem animações
 const animationStyles = `
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
   }
   
-  @keyframes slideInUp {
-    from { 
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to { 
-      opacity: 1;
-      transform: translateY(0);
-    }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 3px;
   }
   
-  @keyframes scaleIn {
-    from { 
-      opacity: 0;
-      transform: scale(0.95);
-    }
-    to { 
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-  
-  .hover\\:scale-102:hover {
-    transform: scale(1.02);
-  }
-  
-  .animate-fadeIn {
-    animation: fadeIn 0.5s ease-out forwards;
-  }
-  
-  .animate-slideInUp {
-    animation: slideInUp 0.5s ease-out forwards;
-  }
-  
-  .animate-scaleIn {
-    animation: scaleIn 0.3s ease-out forwards;
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 3px;
   }
 `;
 
@@ -176,9 +147,7 @@ export function Resultados() {
   const [error, setError] = useState<string | null>(null);
   const [videoModalUrl, setVideoModalUrl] = useState<string | null>(null);
   const [mostrarResultadoNutricional, setMostrarResultadoNutricional] = useState(false);
-  const [mostrarAnimacao, setMostrarAnimacao] = useState(false);
   const [ultimaAvaliacao, setUltimaAvaliacao] = useState<string | null>(null);
-  const [progressoMes, setProgressoMes] = useState<number>(0);
   
   // Obter o ID da query string
   const queryParams = new URLSearchParams(location.search);
@@ -200,17 +169,17 @@ export function Resultados() {
     const style = document.createElement('style');
     style.textContent = `
       .custom-scrollbar::-webkit-scrollbar {
-        width: 8px;
+        width: 6px;
       }
       
       .custom-scrollbar::-webkit-scrollbar-track {
         ${themeStyle.scrollbar.track};
-        border-radius: 10px;
+        border-radius: 8px;
       }
       
       .custom-scrollbar::-webkit-scrollbar-thumb {
         ${themeStyle.scrollbar.thumb};
-        border-radius: 10px;
+        border-radius: 8px;
       }
     `;
     document.head.appendChild(style);
@@ -310,11 +279,10 @@ export function Resultados() {
     buscarPerfil();
   }, [id]);
 
-  // Simular dados de progresso (você pode substituir isso com dados reais do backend)
+  // Dados de progresso
   useEffect(() => {
     if (perfil) {
       setUltimaAvaliacao('15/03/2024');
-      setProgressoMes(75);
     }
   }, [perfil]);
 
@@ -476,252 +444,275 @@ export function Resultados() {
     return <pre className="whitespace-pre-wrap">{conteudo}</pre>;
   };
 
-  // Adicionar efeito de animação ao entrar na página
-  useEffect(() => {
-    setMostrarAnimacao(true);
-  }, []);
+
+
+  // Loading state
+  if (carregando) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Loader2 className="w-12 h-12 text-orange-500 animate-spin" />
+        </div>
+      </Layout>
+    );
+  }
 
   // Renderização principal
   return (
     <Layout>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-3 md:p-6">
-        {/* Banner de Boas-vindas */}
-        <div className="mb-4 md:mb-6 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg overflow-hidden">
-          <div className="p-4 md:p-6 relative">
-            <div className="absolute inset-0 bg-pattern opacity-10"></div>
-            <div className="relative z-10">
-              <h1 className="text-xl md:text-2xl font-bold text-white mb-1">
-                Olá, {perfil?.nome_completo || 'Atleta'}! 👋
-              </h1>
-              <p className="text-sm md:text-base text-blue-100">
-                Acompanhe suas programações e resultados
-              </p>
-              
-              {/* Status Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4 mt-4">
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 md:p-4">
-                  <div className="flex items-center text-white">
-                    <Activity className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                    <span className="text-xs md:text-sm">Status Atual</span>
-                  </div>
-                  <p className="text-lg md:text-xl font-semibold text-white mt-1 md:mt-2">
-                    {perfilLiberado ? 'Ativo' : 'Pendente'}
+      <div className={`min-h-screen ${themeStyle.background} p-4 md:p-8`}>
+                  {/* Header */}
+        <div className="mb-8">
+          <div className={`${themeStyle.card} rounded-lg p-6`}>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-4">
+                <div className={`w-12 h-12 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'} flex items-center justify-center`}>
+                  <User className={`w-6 h-6 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`} />
+                </div>
+                <div>
+                  <h1 className={`text-2xl font-semibold ${themeStyle.text}`}>
+                    Olá, {perfil?.nome_completo || 'Usuário'}
+                  </h1>
+                  <p className={`${themeStyle.textSecondary} text-sm`}>
+                    Acesse suas programações
                   </p>
                 </div>
-                
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 md:p-4">
-                  <div className="flex items-center text-white">
-                    <FileText className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                    <span className="text-xs md:text-sm">Programações</span>
-                  </div>
-                  <div className="mt-1 md:mt-2">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-lg md:text-xl font-semibold text-white">2</span>
-                      <span className="text-xs md:text-sm text-blue-100">Disponíveis</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 md:p-4">
-                  <div className="flex items-center text-white">
-                    <ClipboardCheck className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                    <span className="text-xs md:text-sm">Documentos</span>
-                  </div>
-                  <div className="flex items-center space-x-2 mt-1 md:mt-2">
-                    <span className="text-lg md:text-xl font-semibold text-white">PDF</span>
-                    <span className="text-xs md:text-sm text-blue-100">Disponível</span>
-                  </div>
-                </div>
+              </div>
+              
+              <div className={`px-3 py-1.5 rounded-full text-xs font-medium ${
+                perfilLiberado 
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' 
+                  : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+              }`}>
+                {perfilLiberado ? 'Ativo' : 'Aguardando liberação'}
+              </div>
+            </div>
+            
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className={`text-center p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                <div className={`text-2xl font-bold ${themeStyle.text}`}>2</div>
+                <div className={`text-sm ${themeStyle.textSecondary}`}>Programações</div>
+              </div>
+              <div className={`text-center p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                <div className={`text-2xl font-bold ${themeStyle.text}`}>PDF</div>
+                <div className={`text-sm ${themeStyle.textSecondary}`}>Downloads</div>
+              </div>
+              <div className={`text-center p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                <div className={`text-2xl font-bold ${themeStyle.text}`}>24.5</div>
+                <div className={`text-sm ${themeStyle.textSecondary}`}>IMC Objetivo</div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Cards de Resultados */}
-        <div className="grid grid-cols-1 gap-4 md:gap-6 mb-4 md:mb-6">
-          {/* Card para Resultado Físico - Cor ROXA */}
-          <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-xl overflow-hidden transform transition-all duration-300 hover:scale-102
-            border-t-4 border-purple-500 ${mostrarAnimacao ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}`}
-            style={{transitionDelay: '100ms'}}>
-            <div className="p-4 md:p-6 bg-gradient-to-r from-purple-500 to-purple-600 text-white relative overflow-hidden">
-              <div className="absolute inset-0 opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-purple-300 to-transparent"></div>
-              <h2 className="text-base md:text-lg font-bold flex items-center relative z-10 uppercase mb-2">
-                <Activity className="w-5 h-5 md:w-6 md:h-6 mr-2" />
-                Programação Física
-              </h2>
-              <div className="flex items-center space-x-4 text-purple-100">
-                <div className="flex items-center">
-                  <Clock className="w-4 h-4 mr-1" />
-                  <span>
-                    {ultimaAvaliacao ? `Última programação: ${ultimaAvaliacao}` : 'Não realizada'}
-                  </span>
+        {/* Cards de programação */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Programação Física */}
+          <div className={`${themeStyle.card} rounded-lg p-6 ${!perfilLiberado ? 'opacity-75' : ''}`}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className={`w-10 h-10 rounded-lg bg-purple-600 flex items-center justify-center`}>
+                  <Activity className="w-5 h-5 text-white" />
                 </div>
+                <div>
+                  <h3 className={`text-lg font-semibold ${themeStyle.text}`}>
+                    Programação Física
+                  </h3>
+                  <p className={`text-sm ${themeStyle.textSecondary}`}>
+                    {perfilLiberado ? 'Seu treino personalizado' : 'Aguardando liberação'}
+                  </p>
+                </div>
+              </div>
+              <div className={`w-2 h-2 rounded-full ${perfilLiberado ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+            </div>
+            
+            <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'} mb-4`}>
+              <div className="flex items-center justify-between text-sm">
+                <span className={themeStyle.textSecondary}>Última atualização</span>
+                <span className={themeStyle.text}>{ultimaAvaliacao || 'Não realizada'}</span>
               </div>
             </div>
-            <div className="p-6 bg-gradient-to-b from-white to-purple-50 dark:from-gray-800 dark:to-gray-900">
-              <div className="space-y-4">
-                <div className="flex items-start space-x-4">
-                  <div className="flex-shrink-0 w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <ClipboardCheck className="w-6 h-6 text-purple-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white">Última Medição</h3>
-                    <p className="text-gray-600 dark:text-gray-300">IMC: 24.5 | Peso: 75kg</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 space-y-3">
-                <button
-                  onClick={() => navigate(`/resultado-fisico${id ? `?id=${id}` : ''}`)}
-                  className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg flex items-center justify-center transition-all duration-200 transform hover:-translate-y-1 shadow-lg hover:shadow-xl"
-                >
-                  <FileText className="w-5 h-5 mr-2" />
-                  Ver Programação Física
-                </button>
-                
-                <button
-                  onClick={gerarPDFFisico}
-                  disabled={gerandoFisico || !perfilLiberado || !perfil?.resultado_fisica}
-                  className={`w-full px-4 py-3 rounded-lg flex items-center justify-center transition-all duration-200
-                    ${gerandoFisico || !perfilLiberado || !perfil?.resultado_fisica
-                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
-                      : 'bg-purple-100 hover:bg-purple-200 text-purple-700 dark:bg-purple-900 dark:hover:bg-purple-800 dark:text-purple-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1'}`}
-                >
-                  {gerandoFisico ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Gerando PDF...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-5 h-5 mr-2" />
-                      Baixar PDF
-                    </>
-                  )}
-                </button>
-              </div>
+            
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  if (perfilLiberado) {
+                    navigate(`/resultado-fisico${id ? `?id=${id}` : ''}`)
+                  } else {
+                    alert('Sua programação física ainda está sendo preparada. Aguarde a liberação do administrador.')
+                  }
+                }}
+                disabled={!perfilLiberado}
+                className={`w-full py-3 px-4 rounded-lg transition-colors text-sm font-medium ${
+                  perfilLiberado 
+                    ? `${themeStyle.button}`
+                    : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {perfilLiberado ? (
+                  <>
+                    <FileText className="w-4 h-4 inline mr-2" />
+                    Ver Programação
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4 inline mr-2" />
+                    Em Preparação
+                  </>
+                )}
+              </button>
+              
+              <button
+                onClick={gerarPDFFisico}
+                disabled={gerandoFisico || !perfilLiberado || !perfil?.resultado_fisica}
+                className={`w-full py-3 px-4 rounded-lg transition-colors text-sm font-medium
+                  ${gerandoFisico || !perfilLiberado || !perfil?.resultado_fisica
+                    ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed' 
+                    : `${themeStyle.buttonSecondary}`}`}
+              >
+                {gerandoFisico ? (
+                  <>
+                    <Loader2 className="w-4 h-4 inline mr-2 animate-spin" />
+                    Gerando PDF...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 inline mr-2" />
+                    Baixar PDF
+                  </>
+                )}
+              </button>
             </div>
           </div>
           
-          {/* Card para Resultado Nutricional - Cor LARANJA */}
-          <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-xl overflow-hidden transform transition-all duration-300 hover:scale-102
-            border-t-4 border-orange-500 ${mostrarAnimacao ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4'}`}
-            style={{transitionDelay: '200ms'}}>
-            <div className="p-4 md:p-6 bg-gradient-to-r from-orange-500 to-orange-600 text-white relative overflow-hidden">
-              <div className="absolute inset-0 opacity-20 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-orange-300 to-transparent"></div>
-              <h2 className="text-base md:text-lg font-bold flex items-center relative z-10 uppercase mb-2">
-                <Heart className="w-5 h-5 md:w-6 md:h-6 mr-2" />
-                Programação Nutricional
-              </h2>
-              <div className="flex items-center space-x-4 text-orange-100">
-                <div className="flex items-center">
-                  <Clock className="w-4 h-4 mr-1" />
-                  <span>Última programação: {ultimaAvaliacao || 'Não realizada'}</span>
+          {/* Programação Nutricional */}
+          <div className={`${themeStyle.card} rounded-lg p-6 ${!perfilLiberado ? 'opacity-75' : ''}`}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className={`w-10 h-10 rounded-lg bg-orange-600 flex items-center justify-center`}>
+                  <Heart className="w-5 h-5 text-white" />
                 </div>
+                <div>
+                  <h3 className={`text-lg font-semibold ${themeStyle.text}`}>
+                    Programação Nutricional
+                  </h3>
+                  <p className={`text-sm ${themeStyle.textSecondary}`}>
+                    {perfilLiberado ? 'Sua dieta personalizada' : 'Aguardando liberação'}
+                  </p>
+                </div>
+              </div>
+              <div className={`w-2 h-2 rounded-full ${perfilLiberado ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+            </div>
+            
+            <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'} mb-4`}>
+              <div className="flex items-center justify-between text-sm">
+                <span className={themeStyle.textSecondary}>Última atualização</span>
+                <span className={themeStyle.text}>{ultimaAvaliacao || 'Não realizada'}</span>
               </div>
             </div>
-            <div className="p-6 bg-gradient-to-b from-white to-orange-50 dark:from-gray-800 dark:to-gray-900">
-              <div className="space-y-4">
-                <div className="flex items-start space-x-4">
-                  <div className="flex-shrink-0 w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                    <Scale className="w-6 h-6 text-orange-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white">Medidas Atuais</h3>
-                    <p className="text-gray-600 dark:text-gray-300">IMC: 24.5 | Peso: 75kg</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 space-y-3">
-                <button
-                  onClick={() => navigate(`/resultado-nutricional${id ? `?id=${id}` : ''}`)}
-                  className="w-full px-4 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-lg flex items-center justify-center transition-all duration-200 transform hover:-translate-y-1 shadow-lg hover:shadow-xl"
-                >
-                  <FileText className="w-5 h-5 mr-2" />
-                  Ver Programação Nutricional
-                </button>
-                
-                <button
-                  onClick={gerarPDFNutricional}
-                  disabled={gerandoNutricional}
-                  className={`w-full px-4 py-3 rounded-lg flex items-center justify-center transition-all duration-200
-                    ${gerandoNutricional 
-                      ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
-                      : 'bg-orange-100 hover:bg-orange-200 text-orange-700 dark:bg-orange-900 dark:hover:bg-orange-800 dark:text-orange-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1'}`}
-                >
-                  {gerandoNutricional ? (
-                    <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                      Gerando PDF...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="w-5 h-5 mr-2" />
-                      Baixar PDF
-                    </>
-                  )}
-                </button>
-              </div>
+            
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  if (perfilLiberado) {
+                    navigate(`/resultado-nutricional${id ? `?id=${id}` : ''}`)
+                  } else {
+                    alert('Sua programação nutricional ainda está sendo preparada. Aguarde a liberação do administrador.')
+                  }
+                }}
+                disabled={!perfilLiberado}
+                className={`w-full py-3 px-4 rounded-lg transition-colors text-sm font-medium ${
+                  perfilLiberado 
+                    ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                    : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {perfilLiberado ? (
+                  <>
+                    <FileText className="w-4 h-4 inline mr-2" />
+                    Ver Programação
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4 inline mr-2" />
+                    Em Preparação
+                  </>
+                )}
+              </button>
+              
+              <button
+                onClick={gerarPDFNutricional}
+                disabled={gerandoNutricional || !perfilLiberado || !perfil?.resultado_nutricional}
+                className={`w-full py-3 px-4 rounded-lg transition-colors text-sm font-medium
+                  ${gerandoNutricional || !perfilLiberado || !perfil?.resultado_nutricional
+                    ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed' 
+                    : 'bg-orange-100 hover:bg-orange-200 text-orange-700 dark:bg-orange-900/30 dark:hover:bg-orange-900/50 dark:text-orange-300'}`}
+              >
+                {gerandoNutricional ? (
+                  <>
+                    <Loader2 className="w-4 h-4 inline mr-2 animate-spin" />
+                    Gerando PDF...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 inline mr-2" />
+                    Baixar PDF
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Seção de dicas */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden mb-4 md:mb-6">
-          <div className="p-4 md:p-6 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-sm md:text-base font-bold text-gray-900 dark:text-white flex items-center">
-              <Bell className="w-5 h-5 md:w-6 md:h-6 mr-2 text-blue-500" />
-              Dicas Personalizadas
-            </h2>
+        {/* Dicas úteis */}
+        <div className={`${themeStyle.card} rounded-lg p-6 mb-8`}>
+          <div className="flex items-center space-x-3 mb-4">
+            <div className={`w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center`}>
+              <Bell className="w-4 h-4 text-white" />
+            </div>
+            <h3 className={`text-lg font-semibold ${themeStyle.text}`}>Dicas Importantes</h3>
           </div>
-          <div className="p-4 md:p-6 grid grid-cols-1 gap-4 md:gap-6">
-            <div className="bg-blue-50 dark:bg-gray-700 rounded-lg p-3 md:p-4 border-l-4 border-blue-500">
-              <h3 className="text-sm md:text-base font-semibold text-blue-700 dark:text-blue-300 mb-2">Hidratação</h3>
-              <p className="text-xs md:text-sm text-blue-600 dark:text-blue-200">Lembre-se de beber pelo menos 2L de água por dia para manter o corpo hidratado.</p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'} border-l-4 border-blue-500`}>
+              <h4 className={`font-medium text-blue-600 dark:text-blue-400 text-sm mb-2`}>Hidratação</h4>
+              <p className={`text-sm ${themeStyle.textSecondary}`}>Mantenha-se hidratado com pelo menos 2L de água diariamente</p>
             </div>
             
-            <div className="bg-purple-50 dark:bg-gray-700 rounded-lg p-3 md:p-4 border-l-4 border-purple-500">
-              <h3 className="text-sm md:text-base font-semibold text-purple-700 dark:text-purple-300 mb-2">Descanso</h3>
-              <p className="text-xs md:text-sm text-purple-600 dark:text-purple-200">Mantenha 8 horas de sono por noite para otimizar sua recuperação muscular.</p>
+            <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'} border-l-4 border-purple-500`}>
+              <h4 className={`font-medium text-purple-600 dark:text-purple-400 text-sm mb-2`}>Descanso</h4>
+              <p className={`text-sm ${themeStyle.textSecondary}`}>8 horas de sono para otimizar sua recuperação</p>
             </div>
             
-            <div className="bg-orange-50 dark:bg-gray-700 rounded-lg p-3 md:p-4 border-l-4 border-orange-500">
-              <h3 className="text-sm md:text-base font-semibold text-orange-700 dark:text-orange-300 mb-2">Alimentação</h3>
-              <p className="text-xs md:text-sm text-orange-600 dark:text-orange-200">Faça suas refeições a cada 3 horas para manter o metabolismo ativo.</p>
+            <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-700' : 'bg-gray-50'} border-l-4 border-orange-500`}>
+              <h4 className={`font-medium text-orange-600 dark:text-orange-400 text-sm mb-2`}>Alimentação</h4>
+              <p className={`text-sm ${themeStyle.textSecondary}`}>Refeições regulares a cada 3 horas</p>
             </div>
           </div>
         </div>
 
         {/* Resultado nutricional */}
         {!carregando && perfilLiberado && perfil?.resultado_nutricional && mostrarResultadoNutricional && (
-          <div id="resultado-nutricional" 
-            className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden mt-6 mb-10 border-l-4 border-orange-500
-              ${mostrarResultadoNutricional ? 'animate-fadeIn' : ''}`}
-            style={{boxShadow: '0 20px 25px -5px rgba(249, 115, 22, 0.1), 0 10px 10px -5px rgba(249, 115, 22, 0.05)'}}>
-            <div className="border-b border-gray-200 dark:border-gray-700 p-4 flex justify-between items-center bg-gradient-to-r from-orange-50 to-white dark:from-gray-800 dark:to-gray-700 relative overflow-hidden">
-              <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-orange-300 to-transparent"></div>
-              <h2 className="text-lg font-medium text-orange-800 dark:text-orange-300 flex items-center relative z-10 uppercase">
-                <Heart className="w-5 h-5 mr-2 text-orange-500" />
+          <div id="resultado-nutricional" className={`${themeStyle.card} rounded-lg mt-8 mb-10`}>
+            <div className={`border-b ${isDarkMode ? 'border-gray-700' : 'border-gray-200'} p-6 flex justify-between items-center`}>
+              <h2 className={`text-lg font-semibold ${themeStyle.text} flex items-center`}>
+                <Heart className="w-5 h-5 mr-3 text-orange-500" />
                 Programação Nutricional
               </h2>
               
               <button
                 onClick={gerarPDFNutricional}
                 disabled={gerandoNutricional}
-                className={`
-                  flex items-center px-4 py-2 rounded-md text-sm font-medium relative z-10
+                className={`flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-colors
                   ${gerandoNutricional 
-                    ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed' 
-                    : 'bg-orange-500 hover:bg-orange-600 text-white transform transition hover:scale-105 shadow-md hover:shadow-lg'}
-                  transition-all duration-200
-                `}
+                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed' 
+                    : `${themeStyle.button}`}`}
               >
                 {gerandoNutricional ? 
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Gerando PDF...
+                    Gerando...
                   </> : 
                   <>
                     <Download className="w-4 h-4 mr-2" />
@@ -731,12 +722,19 @@ export function Resultados() {
               </button>
             </div>
             
-            <div className="p-4">
-              <div className="custom-scrollbar overflow-y-auto max-h-[70vh] animate-fadeIn">
+            <div className="p-6">
+              <div className="custom-scrollbar overflow-y-auto max-h-[70vh]">
                 {renderizarResultado(perfil.resultado_nutricional)}
               </div>
             </div>
           </div>
+        )}
+
+        {videoModalUrl && (
+          <VideoModal
+            videoUrl={videoModalUrl}
+            onClose={() => setVideoModalUrl(null)}
+          />
         )}
       </div>
     </Layout>

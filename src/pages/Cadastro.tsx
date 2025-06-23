@@ -1,28 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { UserPlus, CheckCircle, Lock, Mail, User, Phone, Loader2, Check, X } from 'lucide-react';
-import Aurora from '../components/Aurora';
+import { UserPlus, CheckCircle, Lock, Mail, User, Phone, Loader2, Check, X, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { getThemeClass } from '../styles/theme';
 import '../styles/global.css';
 
 export function Cadastro() {
   const navigate = useNavigate();
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
-  
-  const themeClasses = {
-    background: 'bg-gradient-to-br from-gray-900 to-black',
-    text: 'text-white',
-    textSecondary: 'text-white/70',
-    card: 'bg-black/30 backdrop-blur-sm border border-white/10',
-    button: 'bg-orange-600 hover:bg-orange-700 text-white',
-    input: 'bg-white/10 border-white/20 text-white placeholder-white/50',
-    label: 'text-white',
-    select: 'bg-white/10 border-white/20 text-white',
-    errorText: 'text-red-400'
-  };
 
   const [formData, setFormData] = useState({
     nomeCompleto: '',
@@ -38,6 +24,8 @@ export function Cadastro() {
   const [telefoneStatus, setTelefoneStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
   const [telefoneMessage, setTelefoneMessage] = useState('');
   const telefoneTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -292,32 +280,43 @@ export function Cadastro() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
-        <Aurora />
-        
-        <div className={`w-full max-w-md space-y-8 ${themeClasses.card} p-8 rounded-xl relative z-10 mx-4`}>
-          <div className="flex flex-col items-center">
-            <img
-              src="/images/frango.png"
-              alt="Ícone Frango"
-              className="w-12 h-12 mb-4"
-            />
-            <img
-              src="/images/extermina-frango-logo.png"
-              alt="Extermina Frango"
-              className="w-64 mb-8"
-            />
-            <h2 className="text-center text-3xl font-extrabold text-white">
-              Cadastro realizado com sucesso!
-            </h2>
-            <p className="mt-2 text-center text-white/70">
-              Sua conta foi criada. Você já pode fazer login.
-            </p>
+      <div className={`min-h-screen flex items-center justify-center ${
+        isDarkMode ? 'bg-black' : 'bg-gray-50'
+      }`}>
+        <div className="w-full max-w-md mx-4">
+          <div className={`${
+            isDarkMode 
+              ? 'bg-gray-900 border-gray-700' 
+              : 'bg-white border-gray-200'
+          } rounded-2xl shadow-2xl border p-8 text-center space-y-6`}>
+            
+            <div className={`${
+              isDarkMode ? 'bg-green-900/30' : 'bg-green-100'
+            } rounded-full p-6 mx-auto w-fit`}>
+              <CheckCircle className={`h-16 w-16 ${
+                isDarkMode ? 'text-green-400' : 'text-green-500'
+              }`} />
+            </div>
+            
+            <div className="space-y-3">
+              <h2 className={`text-3xl font-bold ${
+                isDarkMode ? 'text-white' : 'text-gray-900'
+              }`}>
+                Cadastro realizado!
+              </h2>
+              <p className={`text-lg ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}>
+                Sua conta foi criada com sucesso. Agora é hora de começar sua jornada fitness!
+              </p>
+            </div>
+            
             <button
               onClick={() => navigate('/login')}
-              className={`${themeClasses.button} w-full flex justify-center py-2 px-4 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2`}
+              className="w-full flex items-center justify-center gap-3 py-4 px-6 rounded-xl font-bold text-lg bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 text-white"
             >
-              Ir para o Login
+              Fazer Login
+              <ArrowRight className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -326,39 +325,115 @@ export function Cadastro() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
-      <Aurora />
+    <div className={`min-h-screen flex ${
+      isDarkMode 
+        ? 'bg-black' 
+        : 'bg-white'
+    }`}>
       
-      <div className={`w-full max-w-md space-y-8 ${themeClasses.card} p-8 rounded-xl relative z-10 mx-4`}>
-        <div className="flex flex-col items-center">
-          <img
-            src="/images/frango.png"
-            alt="Ícone Frango"
-            className="w-12 h-12 mb-4"
-          />
-          <img
-            src="/images/extermina-frango-logo.png"
-            alt="Extermina Frango"
-            className="w-64 mb-8"
-          />
-          <h2 className="text-center text-3xl font-extrabold text-white">
-            Criar nova conta
-          </h2>
-          <p className="mt-2 text-center text-white/70">
-            Ou{' '}
-            <Link to="/login" className="font-medium text-orange-500 hover:text-orange-400">
-              faça login em sua conta existente
-            </Link>
-          </p>
+      {/* Left Side - Hero Section */}
+      <div className={`hidden lg:flex lg:w-1/2 ${
+        isDarkMode 
+          ? 'bg-gradient-to-br from-gray-900 to-black' 
+          : 'bg-gradient-to-br from-orange-500 via-orange-600 to-pink-600'
+      } relative overflow-hidden`}>
+        
+        {/* Content */}
+        <div className="relative z-10 flex flex-col justify-center items-center text-center px-12 w-full">
+          <div className="max-w-md">
+            <img
+              src="/images/frango.png"
+              alt="Extermina Frango"
+              className="w-20 h-20 mx-auto mb-6 drop-shadow-2xl"
+            />
+            
+            <h1 className="text-4xl font-black text-white mb-4 leading-tight">
+              JUNTE-SE AO
+              <br />
+              <span className="text-yellow-300">EXTERMINA</span>
+            </h1>
+            
+            <p className="text-lg text-white/90 mb-6 leading-relaxed">
+              Faça parte da nossa comunidade fitness e transforme seu corpo de uma vez por todas.
+            </p>
+            
+            <div className="space-y-3 text-white/80">
+              <div className="flex items-center justify-center gap-3">
+                <div className="w-2 h-2 bg-yellow-300 rounded-full"></div>
+                <span>Planos personalizados</span>
+              </div>
+              <div className="flex items-center justify-center gap-3">
+                <div className="w-2 h-2 bg-yellow-300 rounded-full"></div>
+                <span>Suporte especializado</span>
+              </div>
+              <div className="flex items-center justify-center gap-3">
+                <div className="w-2 h-2 bg-yellow-300 rounded-full"></div>
+                <span>Comunidade ativa</span>
+              </div>
+            </div>
+          </div>
         </div>
-
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="rounded-md -space-y-px">
-            <div className="mb-4">
-              <label htmlFor="nomeCompleto" className={`block text-sm font-medium ${themeClasses.label}`}>
+        
+        {/* Geometric shapes */}
+        <div className="absolute top-20 right-20 w-32 h-32 bg-white/10 rounded-full blur-xl"></div>
+        <div className="absolute bottom-32 left-16 w-24 h-24 bg-yellow-300/20 rounded-full blur-xl"></div>
+      </div>
+      
+      {/* Right Side - Registration Form */}
+      <div className={`w-full lg:w-1/2 flex items-center justify-center p-6 ${
+        isDarkMode ? 'bg-black' : 'bg-gray-50'
+      }`}>
+        <div className="w-full max-w-md">
+          
+          {/* Mobile Logo */}
+          <div className="lg:hidden text-center mb-8">
+            <img
+              src="/images/frango.png"
+              alt="Extermina Frango"
+              className="w-12 h-12 mx-auto mb-3"
+            />
+            <h1 className={`text-2xl font-black ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
+              EXTERMINA <span className="text-orange-500">FRANGO</span>
+            </h1>
+          </div>
+          
+          {/* Form Header */}
+          <div className="mb-6">
+            <h2 className={`text-2xl font-bold mb-1 ${
+              isDarkMode ? 'text-white' : 'text-gray-900'
+            }`}>
+              Criar sua conta
+            </h2>
+            <p className={`text-base ${
+              isDarkMode ? 'text-gray-400' : 'text-gray-600'
+            }`}>
+              Comece sua transformação hoje mesmo
+            </p>
+          </div>
+          
+          {/* Messages */}
+          {erro && (
+            <div className="mb-4 flex items-center gap-3 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span className="text-sm">{erro}</span>
+            </div>
+          )}
+          
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Nome Completo */}
+            <div>
+              <label htmlFor="nomeCompleto" className={`block text-sm font-semibold mb-1 ${
+                isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
                 Nome Completo
               </label>
-              <div className="mt-1 relative">
+              <div className="relative">
+                <User className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${
+                  isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                }`} />
                 <input
                   id="nomeCompleto"
                   name="nomeCompleto"
@@ -366,20 +441,27 @@ export function Cadastro() {
                   required
                   value={formData.nomeCompleto}
                   onChange={handleChange}
-                  className={`${themeClasses.input} block w-full px-3 py-2 rounded-md`}
-                  placeholder="Ex: João da Silva"
+                  className={`w-full pl-10 pr-4 py-3 rounded-xl border-2 transition-all duration-200 ${
+                    isDarkMode 
+                      ? 'bg-gray-900 border-gray-700 text-white placeholder-gray-500 focus:border-orange-500 focus:bg-gray-800' 
+                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-orange-500 focus:bg-orange-50'
+                  } focus:outline-none`}
+                  placeholder="João da Silva"
                 />
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <User className="h-5 w-5 text-white/50" />
-                </div>
               </div>
             </div>
 
-            <div className="mb-4">
-              <label htmlFor="email" className={`block text-sm font-medium ${themeClasses.label}`}>
-                E-mail
+            {/* Email */}
+            <div>
+              <label htmlFor="email" className={`block text-sm font-semibold mb-1 ${
+                isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
+                Email
               </label>
-              <div className="mt-1 relative">
+              <div className="relative">
+                <Mail className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${
+                  isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                }`} />
                 <input
                   id="email"
                   name="email"
@@ -388,20 +470,27 @@ export function Cadastro() {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className={`${themeClasses.input} block w-full px-3 py-2 rounded-md`}
-                  placeholder="Ex: joao.silva@email.com"
+                  className={`w-full pl-10 pr-4 py-3 rounded-xl border-2 transition-all duration-200 ${
+                    isDarkMode 
+                      ? 'bg-gray-900 border-gray-700 text-white placeholder-gray-500 focus:border-orange-500 focus:bg-gray-800' 
+                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-orange-500 focus:bg-orange-50'
+                  } focus:outline-none`}
+                  placeholder="joao@email.com"
                 />
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-white/50" />
-                </div>
               </div>
             </div>
 
-            <div className="mb-4">
-              <label htmlFor="telefone" className={`block text-sm font-medium ${themeClasses.label}`}>
+            {/* Telefone */}
+            <div>
+              <label htmlFor="telefone" className={`block text-sm font-semibold mb-1 ${
+                isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
                 Telefone (DDD + Número)
               </label>
-              <div className="mt-1 relative">
+              <div className="relative">
+                <Phone className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${
+                  isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                }`} />
                 <input
                   id="telefone"
                   name="telefone"
@@ -409,130 +498,205 @@ export function Cadastro() {
                   required
                   value={formData.telefone}
                   onChange={handleChange}
-                  className={`${themeClasses.input} block w-full px-3 py-2 rounded-md`}
-                  placeholder="Ex: 11999999999"
+                  className={`w-full pl-10 pr-10 py-3 rounded-xl border-2 transition-all duration-200 ${
+                    isDarkMode 
+                      ? 'bg-gray-900 border-gray-700 text-white placeholder-gray-500 focus:border-orange-500 focus:bg-gray-800' 
+                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-orange-500 focus:bg-orange-50'
+                  } focus:outline-none`}
+                  placeholder="11999999999"
                 />
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                   {telefoneStatus === 'checking' ? (
-                    <Loader2 className="h-5 w-5 text-white/50 animate-spin" />
+                    <Loader2 className="h-4 w-4 text-orange-500 animate-spin" />
                   ) : telefoneStatus === 'valid' ? (
-                    <Check className="h-5 w-5 text-green-500" />
+                    <Check className="h-4 w-4 text-green-500" />
                   ) : telefoneStatus === 'invalid' ? (
-                    <X className="h-5 w-5 text-red-500" />
-                  ) : (
-                    <Phone className="h-5 w-5 text-white/50" />
-                  )}
+                    <X className="h-4 w-4 text-red-500" />
+                  ) : null}
                 </div>
               </div>
-              <p className="mt-1 text-sm text-white/50">Digite apenas números: DDD + número (10 ou 11 dígitos)</p>
+              <p className={`mt-1 text-xs ${
+                isDarkMode ? 'text-gray-400' : 'text-gray-600'
+              }`}>
+                Digite apenas números: DDD + número (10 ou 11 dígitos)
+              </p>
               {telefoneMessage && (
-                <p className={`mt-2 text-sm flex items-center gap-2 ${telefoneStatus === 'valid' ? 'text-green-400' : themeClasses.errorText}`}>
-                  {telefoneStatus === 'checking' && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {telefoneStatus === 'valid' && <Check className="h-4 w-4" />}
-                  {telefoneStatus === 'invalid' && <X className="h-4 w-4" />}
+                <p className={`mt-1 text-xs flex items-center gap-2 ${
+                  telefoneStatus === 'valid' 
+                    ? 'text-green-600' 
+                    : 'text-red-600'
+                }`}>
+                  {telefoneStatus === 'checking' && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {telefoneStatus === 'valid' && <Check className="h-3 w-3" />}
+                  {telefoneStatus === 'invalid' && <X className="h-3 w-3" />}
                   {telefoneMessage}
                 </p>
               )}
             </div>
 
-            <div className="mb-4">
-              <label htmlFor="sexo" className={`block text-sm font-medium ${themeClasses.label}`}>
+            {/* Sexo */}
+            <div>
+              <label htmlFor="sexo" className={`block text-sm font-semibold mb-1 ${
+                isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
                 Sexo
               </label>
-              <div className="mt-1 relative">
+              <div className="relative">
                 <select
                   id="sexo"
                   name="sexo"
                   required
                   value={formData.sexo}
                   onChange={handleChange}
-                  className={`${themeClasses.input} block w-full px-3 py-2 rounded-md appearance-none`}
+                  className={`w-full pl-4 pr-8 py-3 rounded-xl border-2 transition-all duration-200 appearance-none ${
+                    isDarkMode 
+                      ? 'bg-gray-900 border-gray-700 text-white focus:border-orange-500 focus:bg-gray-800' 
+                      : 'bg-white border-gray-300 text-gray-900 focus:border-orange-500 focus:bg-orange-50'
+                  } focus:outline-none`}
                 >
-                  <option value="" disabled className="bg-gray-900 text-white">Selecione seu sexo</option>
-                  <option value="masculino" className="bg-gray-900 text-white">Masculino</option>
-                  <option value="feminino" className="bg-gray-900 text-white">Feminino</option>
+                  <option value="" disabled>Selecione seu sexo</option>
+                  <option value="masculino">Masculino</option>
+                  <option value="feminino">Feminino</option>
                 </select>
                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-white/50" viewBox="0 0 20 20" fill="currentColor">
+                  <svg className={`h-4 w-4 ${
+                    isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                  }`} viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                   </svg>
                 </div>
               </div>
             </div>
 
-            <div className="mb-4">
-              <label htmlFor="senha" className={`block text-sm font-medium ${themeClasses.label}`}>
+            {/* Senha */}
+            <div>
+              <label htmlFor="senha" className={`block text-sm font-semibold mb-1 ${
+                isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
                 Senha
               </label>
-              <div className="mt-1 relative">
+              <div className="relative">
+                <Lock className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${
+                  isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                }`} />
                 <input
                   id="senha"
                   name="senha"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   autoComplete="new-password"
                   required
                   value={formData.senha}
                   onChange={handleChange}
-                  className={`${themeClasses.input} block w-full px-3 py-2 rounded-md`}
+                  className={`w-full pl-10 pr-10 py-3 rounded-xl border-2 transition-all duration-200 ${
+                    isDarkMode 
+                      ? 'bg-gray-900 border-gray-700 text-white placeholder-gray-500 focus:border-orange-500 focus:bg-gray-800' 
+                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-orange-500 focus:bg-orange-50'
+                  } focus:outline-none`}
                   placeholder="Mínimo 6 caracteres"
                 />
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-white/50" />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${
+                    isDarkMode ? 'text-gray-500 hover:text-gray-400' : 'text-gray-400 hover:text-gray-600'
+                  } transition-colors`}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
-            <div className="mb-4">
-              <label htmlFor="confirmarSenha" className={`block text-sm font-medium ${themeClasses.label}`}>
+            {/* Confirmar Senha */}
+            <div>
+              <label htmlFor="confirmarSenha" className={`block text-sm font-semibold mb-1 ${
+                isDarkMode ? 'text-gray-300' : 'text-gray-700'
+              }`}>
                 Confirmar Senha
               </label>
-              <div className="mt-1 relative">
+              <div className="relative">
+                <Lock className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${
+                  isDarkMode ? 'text-gray-500' : 'text-gray-400'
+                }`} />
                 <input
                   id="confirmarSenha"
                   name="confirmarSenha"
-                  type="password"
+                  type={showConfirmPassword ? 'text' : 'password'}
                   autoComplete="new-password"
                   required
                   value={formData.confirmarSenha}
                   onChange={handleChange}
-                  className={`${themeClasses.input} block w-full px-3 py-2 rounded-md`}
+                  className={`w-full pl-10 pr-10 py-3 rounded-xl border-2 transition-all duration-200 ${
+                    isDarkMode 
+                      ? 'bg-gray-900 border-gray-700 text-white placeholder-gray-500 focus:border-orange-500 focus:bg-gray-800' 
+                      : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-orange-500 focus:bg-orange-50'
+                  } focus:outline-none`}
                   placeholder="Digite a senha novamente"
                 />
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-white/50" />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${
+                    isDarkMode ? 'text-gray-500 hover:text-gray-400' : 'text-gray-400 hover:text-gray-600'
+                  } transition-colors`}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading || telefoneStatus === 'invalid'}
+              className={`w-full flex items-center justify-center gap-3 py-3 px-6 rounded-xl font-bold transition-all duration-200 transform ${
+                loading || telefoneStatus === 'invalid'
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 shadow-lg hover:shadow-xl hover:-translate-y-1'
+              } text-white`}
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Cadastrando...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="w-4 h-4" />
+                  Criar conta
+                </>
+              )}
+            </button>
+          </form>
+          
+          {/* Divider */}
+          <div className="my-6 relative">
+            <div className={`absolute inset-0 flex items-center`}>
+              <div className={`w-full border-t ${
+                isDarkMode ? 'border-gray-700' : 'border-gray-300'
+              }`}></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className={`px-4 ${
+                isDarkMode ? 'bg-black text-gray-400' : 'bg-gray-50 text-gray-500'
+              }`}>
+                Já tem uma conta?
+              </span>
             </div>
           </div>
-
-          {erro && (
-            <div className="rounded-md bg-red-900/50 border border-red-500/50 p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-400">
-                    {erro}
-                  </h3>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+          
+          {/* Login Link */}
+          <Link
+            to="/login"
+            className={`w-full flex items-center justify-center gap-3 py-3 px-6 rounded-xl font-bold border-2 transition-all duration-200 transform hover:-translate-y-1 ${
+              isDarkMode 
+                ? 'border-gray-700 text-gray-300 hover:bg-gray-900 hover:border-gray-600' 
+                : 'border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400'
+            }`}
           >
-            <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-              <UserPlus className="h-5 w-5 text-orange-500 group-hover:text-orange-400" />
-            </span>
-            {loading ? 'Cadastrando...' : 'Cadastrar'}
-          </button>
-        </form>
+            Fazer login
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
       </div>
     </div>
   );
