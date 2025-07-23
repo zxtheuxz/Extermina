@@ -1,13 +1,16 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { LogIn, Lock, Mail, Eye, EyeOff, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import '../styles/global.css';
 
 export function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme } = useTheme();
+  const { signIn, signOut, userProfile, getDefaultRouteForRole } = useAuth();
   const isDarkMode = theme === 'dark';
   
   const [email, setEmail] = useState('');
@@ -18,20 +21,117 @@ export function Login() {
   const [recuperandoSenha, setRecuperandoSenha] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Verificar se há mensagem de redirecionamento
+  useEffect(() => {
+    const state = location.state as { message?: string; email?: string } | null;
+    if (state?.message) {
+      setErro(state.message);
+      if (state.email) {
+        setEmail(state.email);
+      }
+      // Limpar o state do location
+      navigate('/login', { replace: true });
+    }
+  }, [location.state, navigate]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErro('');
+    
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      console.log('Login: Fazendo login e verificando permissões...');
+      
+      // Fazer autenticação diretamente - mais simples e confiável
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password: senha,
       });
 
-      if (error) throw error;
-      navigate('/dashboard');
+      if (authError) {
+        console.error('Login: Credenciais inválidas:', authError);
+        setErro('Erro ao fazer login. Verifique suas credenciais.');
+        return;
+      }
+
+      if (authData.user) {
+        console.log('Login: Autenticação bem-sucedida, verificando role...');
+        
+        // Buscar o role do usuário autenticado
+        const { data: profileData, error: profileError } = await supabase
+          .from('perfis')
+          .select('role')
+          .eq('user_id', authData.user.id)
+          .single();
+
+        if (!profileError && profileData) {
+          const userRole = profileData.role;
+          console.log(`Login: Role detectado: ${userRole}`);
+          
+          // BLOQUEAR admin e preparador - fazer logout imediato
+          if (userRole === 'admin' || userRole === 'preparador') {
+            console.log('Login: Staff user detectado, fazendo logout e bloqueando acesso');
+            
+            // Fazer logout IMEDIATO antes de mostrar qualquer interface
+            await supabase.auth.signOut();
+            
+            setErro('Admins e preparadores devem usar o Login Staff. Acesse através do link abaixo.');
+            
+            setTimeout(() => {
+              navigate('/staff', { 
+                state: { 
+                  message: 'Use este login para acessar como admin ou preparador.',
+                  email: email 
+                } 
+              });
+            }, 3000);
+            return;
+          }
+
+          // PERMITIR usuários normais (cliente/usuario)
+          if (userRole === 'cliente' || userRole === 'usuario') {
+            console.log('Login: Usuário normal detectado, aguardando AuthContext...');
+            
+            // Aguardar um pouco para o AuthContext processar a mudança de autenticação
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            
+            // Verificar role através do userProfile do contexto para redirecionamento
+            if (userProfile) {
+              const defaultRoute = getDefaultRouteForRole();
+              console.log(`Login: Login bem-sucedido. Role: ${userRole}, redirecionando para ${defaultRoute}`);
+              navigate(defaultRoute);
+            } else {
+              // Se AuthContext não carregou ainda, usar rota padrão baseada no role
+              const defaultRoute = '/dashboard';
+              console.log(`Login: AuthContext não carregado, redirecionando para ${defaultRoute}`);
+              navigate(defaultRoute);
+            }
+            return;
+          }
+
+          // Role não reconhecido
+          console.log(`Login: Role não reconhecido: ${userRole}`);
+          await supabase.auth.signOut();
+          setErro('Tipo de usuário não reconhecido. Entre em contato com o suporte.');
+        } else {
+          // Se não conseguir buscar o perfil, assumir que é usuário novo
+          console.log('Login: Perfil não encontrado, assumindo usuário comum');
+          
+          // Aguardar AuthContext processar
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          if (userProfile) {
+            const defaultRoute = getDefaultRouteForRole();
+            navigate(defaultRoute);
+          } else {
+            navigate('/dashboard');
+          }
+        }
+      }
     } catch (error) {
+      console.error('Login: Erro inesperado:', error);
       setErro('Erro ao fazer login. Verifique suas credenciais.');
+    } finally {
       setLoading(false);
     }
   };

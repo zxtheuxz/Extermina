@@ -10,7 +10,7 @@ import { Button } from '../components/Button';
 import { useTheme } from '../contexts/ThemeContext';
 import { extrairNomeExercicio, encontrarVideoDoExercicio } from '../utils/exercicios';
 import { BotaoMetodoTreino } from '../components/BotaoMetodoTreino';
-import { formatarMetodoPDF } from '../utils/metodosTreino';
+import { formatarMetodoPDF, encontrarMetodoTreino } from '../utils/metodosTreino';
 
 // Design limpo e profissional
 const themeStyles = {
@@ -314,29 +314,305 @@ export function Resultados() {
         format: 'a4'
       });
       
-      // Definições básicas do PDF
+      // Definições de margens e dimensões
       const margemEsquerda = 15;
       const margemDireita = 15;
-      const margemSuperior = 30;
+      const margemSuperior = 25;
+      const margemInferior = 20;
       const larguraUtil = doc.internal.pageSize.width - margemEsquerda - margemDireita;
+      let posicaoY = margemSuperior;
+      let paginaAtual = 1;
       
-      // Adicionar cabeçalho com título - cor roxa para física
-      doc.setFillColor(124, 58, 237); // Cor roxa (purple-600) para física
-      doc.rect(0, 0, doc.internal.pageSize.width, 20, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(16);
-      doc.text('Programação Física', doc.internal.pageSize.width / 2, 12, { align: 'center' });
+      // Função para adicionar cabeçalho em cada página
+      const adicionarCabecalho = (pagina: number) => {
+        // Cabeçalho roxo
+        doc.setFillColor(124, 58, 237); // purple-600
+        doc.rect(0, 0, doc.internal.pageSize.width, 20, 'F');
+        
+        // Título
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text('PROGRAMAÇÃO FÍSICA', doc.internal.pageSize.width / 2, 12, { align: 'center' });
+        
+        // Linha divisória
+        doc.setDrawColor(200, 200, 200);
+        doc.setLineWidth(0.5);
+        doc.line(margemEsquerda, 22, doc.internal.pageSize.width - margemDireita, 22);
+      };
       
-      // Adicionar conteúdo
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(12);
+      // Função para adicionar rodapé
+      const adicionarRodape = (pagina: number, total: number) => {
+        const rodapeY = doc.internal.pageSize.height - 15;
+        
+        // Linha divisória
+        doc.setDrawColor(200, 200, 200);
+        doc.setLineWidth(0.5);
+        doc.line(margemEsquerda, rodapeY - 5, doc.internal.pageSize.width - margemDireita, rodapeY - 5);
+        
+        // Informações do rodapé
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        
+        // Nome do aluno à esquerda
+        doc.text(perfil.nome_completo || 'Aluno', margemEsquerda, rodapeY);
+        
+        // Página no centro
+        doc.text(`Página ${pagina} de ${total}`, doc.internal.pageSize.width / 2, rodapeY, { align: 'center' });
+        
+        // Data à direita
+        const dataAtual = new Date().toLocaleDateString('pt-BR');
+        doc.text(dataAtual, doc.internal.pageSize.width - margemDireita, rodapeY, { align: 'right' });
+      };
       
-      // Processar o texto
-      const linhas = doc.splitTextToSize(conteudo, larguraUtil);
-      doc.text(linhas, margemEsquerda, margemSuperior);
+      // Verificar se é uma ficha de treino
+      const pareceSerFichaDeTreino = conteudo.includes('TREINO A') || 
+                                     conteudo.includes('TREINO B') || 
+                                     conteudo.toLowerCase().includes('treino a') ||
+                                     conteudo.toLowerCase().includes('treino b') ||
+                                     conteudo.includes('exercício') ||
+                                     conteudo.includes('exercicio') ||
+                                     conteudo.includes('séries') ||
+                                     conteudo.includes('series');
+      
+      if (pareceSerFichaDeTreino) {
+        // Processar como ficha de treino
+        const linhas = conteudo.split('\n').filter(linha => linha.trim().length > 0);
+        const treinos: Treino[] = [];
+        let treinoAtual: Treino | null = null;
+        
+        const regexTreino = /TREINO\s+([A-Z])(?:\s*[:]\s*|\s+)(.+)?/i;
+        const regexExercicio = /^(\d+)\s*[-–—]\s*(.+)/i;
+        
+        // Processar linhas para extrair treinos
+        for (const linha of linhas) {
+          const matchTreino = linha.trim().match(regexTreino);
+          
+          if (matchTreino) {
+            if (treinoAtual) {
+              treinos.push(treinoAtual);
+            }
+            
+            treinoAtual = {
+              letra: matchTreino[1],
+              descricao: matchTreino[2] || '',
+              titulo: linha.trim(),
+              exercicios: []
+            };
+          } else if (treinoAtual) {
+            const matchExercicio = linha.trim().match(regexExercicio);
+            
+            if (matchExercicio) {
+              const numero = matchExercicio[1];
+              const nomeCompleto = matchExercicio[2].trim();
+              
+              // Extrair séries e repetições
+              const regexSeriesReps = /(\d+)\s*[xX]\s*([0-9\/]+(?:\s*a\s*\d+)?)/;
+              const matchSeriesReps = nomeCompleto.match(regexSeriesReps);
+              
+              let nome = nomeCompleto;
+              let series = '3x';
+              let repeticoes = '12/10/8';
+              
+              if (matchSeriesReps) {
+                nome = nomeCompleto.replace(matchSeriesReps[0], '').trim();
+                series = matchSeriesReps[1] + 'x';
+                repeticoes = matchSeriesReps[2];
+              }
+              
+              treinoAtual.exercicios.push({
+                numero,
+                nome,
+                series,
+                repeticoes
+              });
+            }
+          }
+        }
+        
+        if (treinoAtual) {
+          treinos.push(treinoAtual);
+        }
+        
+        // Estimar número de páginas
+        const totalPaginas = Math.max(Math.ceil(treinos.length * 0.5), 1);
+        
+        // Adicionar primeira página
+        adicionarCabecalho(paginaAtual);
+        posicaoY = margemSuperior + 5;
+        
+        // Renderizar cada treino
+        for (const treino of treinos) {
+          // Verificar espaço para o título do treino
+          if (posicaoY + 20 > (doc.internal.pageSize.height - margemInferior - 10)) {
+            adicionarRodape(paginaAtual, totalPaginas);
+            doc.addPage();
+            paginaAtual++;
+            adicionarCabecalho(paginaAtual);
+            posicaoY = margemSuperior + 5;
+          }
+          
+          // Título do treino
+          doc.setFillColor(124, 58, 237); // purple-600
+          doc.rect(margemEsquerda, posicaoY, larguraUtil, 10, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(12);
+          doc.text(treino.titulo, margemEsquerda + 5, posicaoY + 7);
+          
+          posicaoY += 15;
+          
+          // Cabeçalho da tabela
+          doc.setFillColor(0, 0, 0);
+          doc.rect(margemEsquerda, posicaoY, larguraUtil * 0.7, 6, 'F');
+          doc.rect(margemEsquerda + larguraUtil * 0.7, posicaoY, larguraUtil * 0.15, 6, 'F');
+          doc.rect(margemEsquerda + larguraUtil * 0.85, posicaoY, larguraUtil * 0.15, 6, 'F');
+          
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(9);
+          doc.setTextColor(255, 255, 255);
+          doc.text('Exercício', margemEsquerda + 2, posicaoY + 4);
+          doc.text('Séries', margemEsquerda + larguraUtil * 0.75, posicaoY + 4, { align: 'center' });
+          doc.text('Repetições', margemEsquerda + larguraUtil * 0.9, posicaoY + 4, { align: 'center' });
+          
+          posicaoY += 8;
+          
+          // Exercícios
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.setTextColor(0, 0, 0);
+          
+          for (let i = 0; i < treino.exercicios.length; i++) {
+            const exercicio = treino.exercicios[i];
+            const alturaExercicio = 8;
+            
+            // Verificar se precisamos de uma nova página
+            if (posicaoY + alturaExercicio > (doc.internal.pageSize.height - margemInferior - 10)) {
+              adicionarRodape(paginaAtual, totalPaginas);
+              doc.addPage();
+              paginaAtual++;
+              adicionarCabecalho(paginaAtual);
+              posicaoY = margemSuperior + 5;
+              
+              // Redesenhar cabeçalho da tabela
+              doc.setFillColor(0, 0, 0);
+              doc.rect(margemEsquerda, posicaoY, larguraUtil * 0.7, 6, 'F');
+              doc.rect(margemEsquerda + larguraUtil * 0.7, posicaoY, larguraUtil * 0.15, 6, 'F');
+              doc.rect(margemEsquerda + larguraUtil * 0.85, posicaoY, larguraUtil * 0.15, 6, 'F');
+              
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(9);
+              doc.setTextColor(255, 255, 255);
+              doc.text('Exercício', margemEsquerda + 2, posicaoY + 4);
+              doc.text('Séries', margemEsquerda + larguraUtil * 0.75, posicaoY + 4, { align: 'center' });
+              doc.text('Repetições', margemEsquerda + larguraUtil * 0.9, posicaoY + 4, { align: 'center' });
+              
+              posicaoY += 8;
+            }
+            
+            // Linhas alternadas
+            if (i % 2 === 0) {
+              doc.setFillColor(245, 245, 245);
+            } else {
+              doc.setFillColor(255, 255, 255);
+            }
+            doc.rect(margemEsquerda, posicaoY, larguraUtil, alturaExercicio, 'F');
+            
+            // Dados do exercício
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(0, 0, 0);
+            doc.text(`${exercicio.numero} - ${exercicio.nome}`, margemEsquerda + 2, posicaoY + alturaExercicio/2 + 1);
+            doc.text(exercicio.series, margemEsquerda + larguraUtil * 0.75, posicaoY + alturaExercicio/2 + 1, { align: 'center' });
+            doc.text(exercicio.repeticoes, margemEsquerda + larguraUtil * 0.9, posicaoY + alturaExercicio/2 + 1, { align: 'center' });
+            
+            // Adicionar botão de vídeo se existir
+            const videoUrl = encontrarVideoDoExercicio(exercicio.nome);
+            if (videoUrl) {
+              const larguraBotao = 30;
+              const alturaBotao = 7;
+              const posXBotao = margemEsquerda + larguraUtil - 3;
+              const posYBotao = posicaoY + (alturaExercicio - alturaBotao) / 2;
+              
+              doc.setFillColor(147, 51, 234); // purple-600
+              doc.roundedRect(posXBotao - larguraBotao, posYBotao, larguraBotao, alturaBotao, 1, 1, 'F');
+              
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(9);
+              doc.setTextColor(255, 255, 255);
+              doc.text('VER VÍDEO', posXBotao - larguraBotao/2, posYBotao + alturaBotao/2 + 1, { align: 'center' });
+              
+              doc.link(posXBotao - larguraBotao, posYBotao, larguraBotao, alturaBotao, { url: videoUrl });
+              
+              doc.setTextColor(0, 0, 0);
+            }
+            
+            // Adicionar método se existir
+            const metodoInfo = formatarMetodoPDF(exercicio.nome);
+            if (metodoInfo) {
+              posicaoY += alturaExercicio;
+              
+              doc.setFont('helvetica', 'bold');
+              doc.setFontSize(9);
+              doc.setTextColor(0, 0, 255);
+              doc.text(`MÉTODO ${metodoInfo.metodoNome}:`, margemEsquerda + 2, posicaoY + 4);
+              
+              const descricaoLinhas = doc.splitTextToSize(metodoInfo.descricao, larguraUtil - 10);
+              const alturaDescricao = descricaoLinhas.length * 5 + 10;
+              
+              doc.setFillColor(230, 240, 255);
+              doc.rect(margemEsquerda, posicaoY + 6, larguraUtil, alturaDescricao, 'F');
+              
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(9);
+              doc.setTextColor(0, 0, 200);
+              
+              for (let j = 0; j < descricaoLinhas.length; j++) {
+                doc.text(descricaoLinhas[j], margemEsquerda + 5, posicaoY + 12 + (j * 5));
+              }
+              
+              posicaoY += alturaDescricao;
+              doc.setTextColor(0, 0, 0);
+            } else {
+              posicaoY += alturaExercicio;
+            }
+          }
+          
+          posicaoY += 15;
+        }
+        
+        adicionarRodape(paginaAtual, totalPaginas);
+      } else {
+        // Processar como texto simples
+        const totalPaginas = 1;
+        adicionarCabecalho(paginaAtual);
+        posicaoY = margemSuperior + 5;
+        
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        
+        const linhas = doc.splitTextToSize(conteudo, larguraUtil);
+        
+        for (const linha of linhas) {
+          if (posicaoY >= (doc.internal.pageSize.height - margemInferior)) {
+            adicionarRodape(paginaAtual, totalPaginas);
+            doc.addPage();
+            paginaAtual++;
+            adicionarCabecalho(paginaAtual);
+            posicaoY = margemSuperior + 5;
+          }
+          
+          doc.text(linha, margemEsquerda, posicaoY);
+          posicaoY += 5;
+        }
+        
+        adicionarRodape(paginaAtual, totalPaginas);
+      }
 
       // Salvar o PDF
-      doc.save('avaliacao_fisica.pdf');
+      doc.save('programacao_fisica.pdf');
       console.log('PDF físico gerado com sucesso!');
     } catch (error) {
       console.error('Erro ao gerar PDF da avaliação física:', error);
@@ -348,69 +624,613 @@ export function Resultados() {
     }
   };
   
-  // Função para gerar PDF nutricional (atualizar cor para laranja)
+  // Função para gerar PDF nutricional com formato profissional
   const gerarPDFNutricional = async () => {
-    console.log('[gerarPDFNutricional] Iniciando geração...');
+  console.log('[gerarPDFNutricional] Iniciando geração...');
+  
+  if (!perfil) {
+    console.error('[gerarPDFNutricional] Perfil não encontrado');
+    alert('Perfil não encontrado. Não é possível gerar o PDF.');
+    return;
+  }
+  
+  const conteudo = perfil.resultado_nutricional;
     
-    if (!perfil) {
-      console.error('[gerarPDFNutricional] Perfil não encontrado');
-      alert('Perfil não encontrado. Não é possível gerar o PDF.');
-      return;
-    }
-    
-    const conteudo = perfil.resultado_nutricional;
-      
-    if (!conteudo) {
-      console.error('[gerarPDFNutricional] Conteúdo nutricional não disponível');
-      alert('Não há resultado de programação nutricional disponível para gerar o PDF');
-      return;
-    }
+  if (!conteudo) {
+    console.error('[gerarPDFNutricional] Conteúdo nutricional não disponível');
+    alert('Não há resultado de programação nutricional disponível para gerar o PDF');
+    return;
+  }
 
-    try {
-      console.log('[gerarPDFNutricional] Definindo estado...');
-      setGerandoNutricional(true);
-      
-      // Configuração do documento
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-      
-      // Definições de margens e dimensões
-      const margemEsquerda = 15;
-      const margemDireita = 15;
-      const margemSuperior = 30;
-      const margemInferior = 20;
-      const larguraUtil = doc.internal.pageSize.width - margemEsquerda - margemDireita;
-      
-      // Adicionar cabeçalho com título - usando laranja para nutricional
-      doc.setFillColor(249, 115, 22); // Cor laranja (orange-500) para nutricional
+  try {
+    console.log('[gerarPDFNutricional] Definindo estado...');
+    setGerandoNutricional(true);
+    
+    // Configuração do documento
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+    
+    // Definições de margens e dimensões
+    const margemEsquerda = 15;
+    const margemDireita = 15;
+    const margemSuperior = 30;
+    const margemInferior = 20;
+    const larguraUtil = doc.internal.pageSize.width - margemEsquerda - margemDireita;
+    
+    // Variáveis de controle de página e posição
+    let paginaAtual = 1;
+    let posicaoY = margemSuperior + 5;
+    
+    // Função para adicionar cabeçalho
+    const adicionarCabecalho = (pagina: number) => {
+      // Retângulo laranja do cabeçalho
+      doc.setFillColor(236, 72, 21); // Laranja vivo
       doc.rect(0, 0, doc.internal.pageSize.width, 20, 'F');
-      doc.setTextColor(255, 255, 255);
+      
+      // Título
+      doc.setFont('helvetica', 'bold');
       doc.setFontSize(16);
-      doc.text('Programação Nutricional', doc.internal.pageSize.width / 2, 12, { align: 'center' });
+      doc.setTextColor(255, 255, 255); // Texto branco
+      doc.text('RESULTADO DA AVALIAÇÃO NUTRICIONAL', doc.internal.pageSize.width / 2, 13, { align: 'center' });
       
-      // Adicionar conteúdo
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(12);
+      // Data e nome do cliente
+      const dataAtual = new Date().toLocaleDateString('pt-BR');
+      const nomeCliente = perfil?.nome_completo || perfil?.nome || 'Usuário';
       
-      // Processar o texto
-      const linhas = doc.splitTextToSize(conteudo, larguraUtil);
-      doc.text(linhas, margemEsquerda, margemSuperior);
-      
-      // Salvar o PDF
-      doc.save('avaliacao_nutricional.pdf');
-      console.log('PDF gerado com sucesso!');
-    } catch (error) {
-      console.error('Erro ao gerar PDF da avaliação nutricional:', error);
-      alert('Ocorreu um erro ao gerar o PDF. Por favor, tente novamente.');
-    } finally {
-      setTimeout(() => {
-        setGerandoNutricional(false);
-      }, 1000);
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0); // Texto preto
+      doc.text(`Cliente: ${nomeCliente}`, margemEsquerda, 28);
+      doc.text(`Data: ${dataAtual}`, doc.internal.pageSize.width - margemDireita, 28, { align: 'right' });
+    };
+    
+    // Função para adicionar rodapé
+    const adicionarRodape = (pagina: number, totalPaginas: number) => {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(100, 100, 100);
+      doc.text(
+        `Página ${pagina} de ${totalPaginas}`, 
+        doc.internal.pageSize.width / 2, 
+        doc.internal.pageSize.height - 10, 
+        { align: 'center' }
+      );
+    };
+    
+    // Adicionar primeira página
+    adicionarCabecalho(paginaAtual);
+    
+    // Verificar se o conteúdo parece ser um planejamento alimentar
+    const pareceSerPlanejamentoAlimentar = conteudo.includes('Planejamento alimentar') || 
+                                     conteudo.includes('Café da manhã') ||
+                                     conteudo.includes('Almoço') ||
+                                     conteudo.includes('Jantar') ||
+                                     conteudo.includes('kcal') ||
+                                     conteudo.includes('Colação') ||
+                                     conteudo.includes('Ceia');
+                                      
+    if (pareceSerPlanejamentoAlimentar) {
+      try {
+        // Dividir o conteúdo em linhas
+        const linhas = conteudo.split('\n').filter((linha: string) => linha.trim().length > 0);
+        
+        // Array para armazenar as refeições
+        const refeicoes: any[] = [];
+        let refeicaoAtual: any = null;
+        let tituloGeral = '';
+        let listaDeCompras: string[] = [];
+        let emListaDeCompras = false;
+        
+        // Expressões regulares para identificar refeições
+        const regexRefeicao = /^(Café da manhã|Colação|Almoço|Lanche da Tarde|Lanche da Tarde Substituto|Jantar|Ceia)\s*$/i;
+        const regexObservacoes = /^Observações:(.+)/i;
+        const regexSubstituicoes = /^• Opções de substituição para (.+):$/i;
+        const regexAlimento = /^([^•].+)$/i;
+        const regexTitulo = /^Planejam[e|n]to Alimentar\s+(.+)/i;
+        const regexListaCompras = /^Lista de compras\s*$/i;
+        
+        // Variáveis para controle
+        let emObservacoes = false;
+        let emSubstituicoes = false;
+        let alimentoAtual = '';
+        let substituicoes: string[] = [];
+        
+        // Processar cada linha
+        for (let i = 0; i < linhas.length; i++) {
+          const linha = linhas[i].trim();
+          
+          // Verificar se é uma linha com o tipo/calorias do plano
+          if (linha.includes('kcal') && (linha.includes('Emagrecimento') || linha.includes('Ganho'))) {
+            console.log('[gerarPDF] Encontrada linha de calorias/objetivo:', linha);
+            
+            // Verificar e corrigir duplicações no título
+            if (linha.toLowerCase().includes('planejamento alimentar planejamento alimentar') || 
+                linha.toLowerCase().includes('planejamento alimentar planejamneto alimentar')) {
+              console.log('[gerarPDF] Detectada duplicação no título:', linha);
+              tituloGeral = linha.replace(/planejam[e|n]to\s+alimentar\s+planejam[e|n]to\s+alimentar/i, 'Planejamento Alimentar');
+            } else {
+              tituloGeral = linha;
+            }
+            continue;
+          }
+          
+          // Verificar se é o título geral
+          const matchTitulo = linha.match(regexTitulo);
+          if (matchTitulo) {
+            console.log('[gerarPDF] Encontrado título:', linha);
+            if (!tituloGeral) {
+              // Verificar e corrigir duplicações no título
+              if (linha.toLowerCase().includes('planejamento alimentar planejamento alimentar') || 
+                  linha.toLowerCase().includes('planejamento alimentar planejamneto alimentar')) {
+                console.log('[gerarPDF] Detectada duplicação no título:', linha);
+                tituloGeral = linha.replace(/planejam[e|n]to\s+alimentar\s+planejam[e|n]to\s+alimentar/i, 'Planejamento Alimentar');
+              } else {
+                tituloGeral = linha;
+              }
+            }
+            continue;
+          }
+          
+          // Verificar se é o início da lista de compras
+          const matchListaCompras = linha.match(regexListaCompras);
+          if (matchListaCompras || (linha.includes('Lista de compras') && !emSubstituicoes)) {
+            emListaDeCompras = true;
+            emObservacoes = false;
+            emSubstituicoes = false;
+            
+            // Se estávamos em uma refeição, adicioná-la antes
+            if (refeicaoAtual) {
+              refeicoes.push(refeicaoAtual);
+              refeicaoAtual = null;
+            }
+            continue;
+          }
+          
+          // Se estamos na lista de compras, adicionar item
+          if (emListaDeCompras) {
+            // Ignorar linhas que parecem títulos de refeição ou outras seções
+            if (!linha.match(regexRefeicao) && !linha.match(regexTitulo) && 
+                !linha.includes('Planejamento alimentar') && !linha.startsWith('•')) {
+              listaDeCompras.push(linha);
+            }
+            continue;
+          }
+          
+          // Verificar se é um nome de refeição
+          const matchRefeicao = linha.match(regexRefeicao);
+          if (matchRefeicao) {
+            // Se já temos uma refeição atual, adicionar ao array
+            if (refeicaoAtual) {
+              refeicoes.push(refeicaoAtual);
+            }
+            
+            // Criar nova refeição
+            refeicaoAtual = {
+              nome: matchRefeicao[1],
+              alimentos: [],
+              observacoes: '',
+            };
+            
+            emObservacoes = false;
+            emSubstituicoes = false;
+            continue;
+          }
+          
+          // Verificar se estamos em uma refeição
+          if (refeicaoAtual) {
+            // Verificar se é o início de observações
+            const matchObservacoes = linha.match(regexObservacoes);
+            if (matchObservacoes) {
+              emObservacoes = true;
+              refeicaoAtual.observacoes = matchObservacoes[1].trim();
+              continue;
+            }
+            
+            // Se estamos em observações, adicionar à observação atual
+            if (emObservacoes) {
+              refeicaoAtual.observacoes += ' ' + linha;
+              continue;
+            }
+            
+            // Verificar se é o início de substituições
+            const matchSubstituicoes = linha.match(regexSubstituicoes);
+            if (matchSubstituicoes) {
+              emSubstituicoes = true;
+              alimentoAtual = matchSubstituicoes[1].trim();
+              substituicoes = [];
+              continue;
+            }
+            
+            // Se estamos em substituições
+            if (emSubstituicoes) {
+              if (linha.startsWith('•')) {
+                // Nova substituição, salvar as anteriores
+                if (substituicoes.length > 0) {
+                  // Encontrar o alimento correspondente
+                  const alimentoIndex = refeicaoAtual.alimentos.findIndex(
+                    (alimento: any) => alimento.nome === alimentoAtual
+                  );
+                  
+                  if (alimentoIndex !== -1) {
+                    refeicaoAtual.alimentos[alimentoIndex].substituicoes = substituicoes;
+                  }
+                  
+                  // Reiniciar para a nova substituição
+                  const novoMatchSubstituicoes = linha.match(/^• Opções de substituição para (.+):$/i);
+                  if (novoMatchSubstituicoes) {
+                    alimentoAtual = novoMatchSubstituicoes[1].trim();
+                    substituicoes = [];
+                  }
+                }
+              } else {
+                // Adicionar à lista de substituições
+                substituicoes.push(linha);
+                
+                // Verificar se estamos no final da lista de substituições
+                if (i + 1 === linhas.length || 
+                    linhas[i + 1].match(regexRefeicao) || 
+                    linhas[i + 1].match(regexObservacoes) ||
+                    linhas[i + 1].match(regexListaCompras) ||
+                    linhas[i + 1].startsWith('•')) {
+                  // Encontrar o alimento correspondente
+                  const alimentoIndex = refeicaoAtual.alimentos.findIndex(
+                    (alimento: any) => alimento.nome === alimentoAtual
+                  );
+                  
+                  if (alimentoIndex !== -1) {
+                    refeicaoAtual.alimentos[alimentoIndex].substituicoes = substituicoes;
+                  }
+                  
+                  // Fim das substituições
+                  if (i + 1 < linhas.length && !linhas[i + 1].startsWith('•')) {
+                    emSubstituicoes = false;
+                  }
+                }
+              }
+              continue;
+            }
+            
+            // Se não estamos em observações nem substituições, deve ser um alimento
+            const matchAlimento = linha.match(regexAlimento);
+            if (matchAlimento && !linha.startsWith('•') && !linha.includes('Lista de compras')) {
+              // Extrair nome e porção
+              const partes = linha.split('\n');
+              const nome = partes[0].trim();
+              const porcao = i + 1 < linhas.length ? linhas[i + 1].trim() : '';
+              
+              // Pular a linha da porção se necessário
+              if (porcao && !porcao.startsWith('•') && !porcao.match(regexRefeicao) && !porcao.match(regexObservacoes)) {
+                i++;
+              }
+              
+              // Adicionar à lista de alimentos
+              refeicaoAtual.alimentos.push({
+                nome,
+                porcao: porcao || '',
+                substituicoes: []
+              });
+            }
+          }
+        }
+        
+        // Adicionar a última refeição
+        if (refeicaoAtual) {
+          refeicoes.push(refeicaoAtual);
+        }
+        
+        // Extrair informações do título para destacar o tipo de dieta
+        let tipoDieta = "";
+        let objetivoDieta = "";
+        let caloriasTexto = "";
+        
+        if (tituloGeral) {
+          // Verificar se contém informações sobre calorias
+          const matchCalorias = tituloGeral.match(/(\d+)\s*kcal/i);
+          if (matchCalorias) {
+            caloriasTexto = matchCalorias[1] + " kcal";
+          }
+          
+          // Verificar se contém informações sobre emagrecimento ou ganho
+          if (tituloGeral.toLowerCase().includes("emagrecimento")) {
+            objetivoDieta = "Emagrecimento";
+          } else if (tituloGeral.toLowerCase().includes("ganho")) {
+            objetivoDieta = "Ganho Muscular";
+          }
+        }
+        
+        // Adicionar o título do planejamento alimentar logo após o cabeçalho
+        doc.setFillColor(236, 72, 21); // Laranja
+        doc.rect(margemEsquerda, posicaoY, larguraUtil, 10, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(255, 255, 255); // Branco
+        doc.text('Planejamento Alimentar', doc.internal.pageSize.width / 2, posicaoY + 6, { align: 'center' });
+        posicaoY += 15;
+        
+        // Adicionar informações de calorias e objetivo em destaque
+        if (caloriasTexto || objetivoDieta) {
+          let infoText = '';
+          if (caloriasTexto) infoText += caloriasTexto;
+          if (caloriasTexto && objetivoDieta) infoText += ' - ';
+          if (objetivoDieta) infoText += objetivoDieta;
+          
+          doc.setFillColor(245, 245, 245); // Cinza claro
+          doc.rect(margemEsquerda, posicaoY, larguraUtil, 8, 'F');
+          doc.setFontSize(10);
+          doc.setTextColor(236, 72, 21); // Laranja
+          doc.setFont('helvetica', 'bold');
+          doc.text(infoText, doc.internal.pageSize.width / 2, posicaoY + 5, { align: 'center' });
+          posicaoY += 13;
+        }
+        
+        // Renderizar cada refeição como uma tabela
+        for (const refeicao of refeicoes) {
+          // Verificar se precisa de nova página
+          const alturaEstimadaRefeicao = 15 + (refeicao.alimentos.length * 15);
+          if (posicaoY + alturaEstimadaRefeicao > doc.internal.pageSize.height - margemInferior - 20) {
+            adicionarRodape(paginaAtual, paginaAtual + 1);
+            doc.addPage();
+            paginaAtual++;
+            adicionarCabecalho(paginaAtual);
+            posicaoY = margemSuperior + 5;
+          }
+          
+          // Título da refeição
+          doc.setFillColor(236, 72, 21); // Laranja vivo
+          doc.rect(margemEsquerda, posicaoY, larguraUtil, 8, 'F');
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(11);
+          doc.setTextColor(255, 255, 255);
+          doc.text(refeicao.nome, doc.internal.pageSize.width / 2, posicaoY + 5.5, { align: 'center' });
+          posicaoY += 12;
+          
+          // Cabeçalho da tabela
+          doc.setFillColor(245, 130, 32); // Laranja mais claro
+          doc.rect(margemEsquerda, posicaoY, larguraUtil / 2, 7, 'F');
+          doc.rect(margemEsquerda + larguraUtil / 2, posicaoY, larguraUtil / 2, 7, 'F');
+          
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(10);
+          doc.text('Alimento', margemEsquerda + 5, posicaoY + 5);
+          doc.text('Porção', margemEsquerda + larguraUtil / 2 + 5, posicaoY + 5);
+          posicaoY += 7;
+          
+          // Conteúdo da tabela
+          for (let i = 0; i < refeicao.alimentos.length; i++) {
+            const alimento = refeicao.alimentos[i];
+            const ehPar = i % 2 === 0;
+            
+            // Fundo da linha
+            doc.setFillColor(ehPar ? 255 : 240, ehPar ? 255 : 240, ehPar ? 255 : 240);
+            doc.rect(margemEsquerda, posicaoY, larguraUtil, 7, 'F');
+            
+            // Texto da linha
+            doc.setTextColor(0, 0, 0);
+            doc.setFont('helvetica', 'normal');
+            doc.text(alimento.nome, margemEsquerda + 5, posicaoY + 5);
+            doc.text(alimento.porcao, margemEsquerda + larguraUtil / 2 + 5, posicaoY + 5);
+            posicaoY += 7;
+            
+            // Adicionar substituições se existirem
+            if (alimento.substituicoes && alimento.substituicoes.length > 0) {
+              // Fundo para substituições
+              doc.setFillColor(255, 240, 220); // Laranja bem claro
+              
+              // Calcular a altura total necessária para exibir todas as substituições
+              let alturaTotal = 8; // Altura para o título
+              
+              // Pré-calcular as linhas de texto para cada substituição
+              const todasAsLinhas = [];
+              for (const substituicao of alimento.substituicoes) {
+                const linhasSubst = doc.splitTextToSize('• ' + substituicao, larguraUtil - 10);
+                todasAsLinhas.push(linhasSubst);
+                alturaTotal += linhasSubst.length * 5;
+              }
+              
+              alturaTotal += 2; // Espaçamento final
+              
+              // Desenhar o retângulo de fundo com a altura correta
+              doc.rect(margemEsquerda, posicaoY, larguraUtil, alturaTotal, 'F');
+              
+              // Título das substituições
+              doc.setFont('helvetica', 'bold');
+              doc.setTextColor(236, 72, 21); // Cor laranja para o título
+              doc.text('Opções de Substituição:', margemEsquerda + 5, posicaoY + 5);
+              posicaoY += 8;
+              
+              // Listar cada substituição
+              doc.setFont('helvetica', 'normal');
+              doc.setTextColor(0, 0, 0);
+              
+              for (let j = 0; j < alimento.substituicoes.length; j++) {
+                doc.setFontSize(9);
+                // Usar as linhas pré-calculadas
+                const linhasSubst = todasAsLinhas[j];
+                doc.text(linhasSubst, margemEsquerda + 7, posicaoY);
+                posicaoY += linhasSubst.length * 5;
+              }
+              
+              posicaoY += 2;
+            }
+          }
+          
+          // Adicionar observações se existirem
+          if (refeicao.observacoes) {
+            doc.setFillColor(240, 240, 240);
+            doc.rect(margemEsquerda, posicaoY, larguraUtil, 7, 'F');
+            
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(0, 0, 0);
+            doc.text('Observações: ', margemEsquerda + 5, posicaoY + 5);
+            
+            const obsTexto = refeicao.observacoes;
+            doc.setFont('helvetica', 'normal');
+            const obsWidth = doc.getTextWidth('Observações: ');
+            const linhasObs = doc.splitTextToSize(obsTexto, larguraUtil - obsWidth - 10);
+            
+            if (linhasObs.length > 1) {
+              // Se tiver múltiplas linhas, adicionar em linhas separadas
+              posicaoY += 7;
+              doc.text(linhasObs, margemEsquerda + 5, posicaoY);
+              posicaoY += linhasObs.length * 5;
+            } else {
+              // Se for uma única linha, adicionar na mesma linha
+              doc.text(obsTexto, margemEsquerda + 5 + obsWidth, posicaoY + 5);
+              posicaoY += 7;
+            }
+          }
+          
+          posicaoY += 10; // Espaço após cada refeição
+        }
+        
+        // Adicionar Lista de Compras se existir
+        if (listaDeCompras.length > 0) {
+          // Verificar se precisa de nova página
+          const alturaEstimadaLista = 15 + Math.ceil(listaDeCompras.length / 2) * 7;
+          if (posicaoY + alturaEstimadaLista > doc.internal.pageSize.height - margemInferior - 20) {
+            adicionarRodape(paginaAtual, paginaAtual + 1);
+            doc.addPage();
+            paginaAtual++;
+            adicionarCabecalho(paginaAtual);
+            posicaoY = margemSuperior + 5;
+          }
+          
+          // Título da lista de compras
+          doc.setFillColor(236, 72, 21); // Laranja vivo
+          doc.rect(margemEsquerda, posicaoY, larguraUtil, 8, 'F');
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(11);
+          doc.setTextColor(255, 255, 255);
+          doc.text('Lista de Compras', doc.internal.pageSize.width / 2, posicaoY + 5.5, { align: 'center' });
+          posicaoY += 12;
+          
+          // Calcular quantos itens por coluna
+          const itensTotal = listaDeCompras.length;
+          const itensPorColuna = Math.ceil(itensTotal / 2);
+          const larguraColuna = larguraUtil / 2 - 5;
+          
+          // Desenhar itens em duas colunas
+          for (let i = 0; i < itensPorColuna; i++) {
+            const itemEsquerda = listaDeCompras[i];
+            const itemDireita = i + itensPorColuna < itensTotal ? listaDeCompras[i + itensPorColuna] : null;
+            
+            // Verificar se precisa de nova página
+            if (posicaoY + 7 > doc.internal.pageSize.height - margemInferior - 20) {
+              adicionarRodape(paginaAtual, paginaAtual + 1);
+              doc.addPage();
+              paginaAtual++;
+              adicionarCabecalho(paginaAtual);
+              posicaoY = margemSuperior + 5;
+            }
+            
+            // Fundo colorido alternado
+            const ehPar = i % 2 === 0;
+            if (ehPar) {
+              doc.setFillColor(245, 245, 245);
+              doc.rect(margemEsquerda, posicaoY, larguraUtil, 7, 'F');
+            }
+            
+            // Texto dos itens
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(0, 0, 0);
+            
+            // Item da esquerda
+            doc.text('• ' + itemEsquerda, margemEsquerda + 5, posicaoY + 5);
+            
+            // Item da direita (se existir)
+            if (itemDireita) {
+              doc.text('• ' + itemDireita, margemEsquerda + larguraUtil / 2 + 5, posicaoY + 5);
+            }
+            
+            posicaoY += 7;
+          }
+        }
+        
+      } catch (error) {
+        console.error('[gerarPDF] Erro ao processar planejamento alimentar:', error);
+        console.log('[gerarPDF] Fallback para processamento como texto simples');
+        processarTextoSimples(conteudo);
+      }
+    } else {
+      // Processar como texto simples se não for um planejamento alimentar
+      processarTextoSimples(conteudo);
     }
-  };
+    
+    function processarTextoSimples(texto: string) {
+      console.log('[gerarPDF] Processando como texto simples');
+      const paragrafos = texto.split('\n');
+      
+      for (let i = 0; i < paragrafos.length; i++) {
+        const paragrafo = paragrafos[i].trim();
+        
+        // Pular linhas em branco
+        if (paragrafo === '') {
+          posicaoY += 3;
+          continue;
+        }
+        
+        // Dividir o texto em linhas para caber na largura da página
+        const linhasTexto = doc.splitTextToSize(paragrafo, larguraUtil);
+        const alturaTexto = linhasTexto.length * 5;
+        
+        // Verificar se precisa de nova página
+        if (posicaoY + alturaTexto > doc.internal.pageSize.height - margemInferior - 20) {
+          adicionarRodape(paginaAtual, paginaAtual + 1);
+          doc.addPage();
+          paginaAtual++;
+          adicionarCabecalho(paginaAtual);
+          posicaoY = margemSuperior + 5;
+        }
+        
+        // Verificar se é um título (todo em maiúsculas)
+        const ehTitulo = paragrafo === paragrafo.toUpperCase() && paragrafo.length > 3 && paragrafo.length < 50;
+        
+        if (ehTitulo) {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(12);
+        } else {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(10);
+        }
+        
+        doc.text(linhasTexto, margemEsquerda, posicaoY);
+        posicaoY += alturaTexto + (ehTitulo ? 5 : 3);
+      }
+    }
+    
+    // Adicionar rodapé na última página
+    adicionarRodape(paginaAtual, paginaAtual);
+    
+    // Salvar o PDF
+    const nomeArquivoCliente = perfil?.nome_completo || perfil?.nome || 'usuario';
+    const nomeArquivo = `resultado_nutricional_${nomeArquivoCliente.replace(/\s+/g, '_').toLowerCase()}.pdf`;
+    
+    console.log('[gerarPDF] Salvando PDF como:', nomeArquivo);
+    doc.save(nomeArquivo);
+    
+    console.log('[gerarPDF] PDF gerado com sucesso!');
+    alert('PDF da avaliação nutricional gerado com sucesso!');
+  } catch (error) {
+    console.error('[gerarPDF] Erro ao gerar PDF:', error);
+    
+    if (error instanceof Error) {
+      console.error('[gerarPDF] Detalhes:', error.message);
+      console.error('[gerarPDF] Stack:', error.stack);
+    }
+    
+    alert('Erro ao gerar o PDF da avaliação nutricional. Tente novamente.');
+  } finally {
+    // Resetar o estado de geração
+    console.log('[gerarPDF] Finalizando, resetando estado...');
+    setTimeout(() => {
+      setGerandoNutricional(false);
+    }, 1000);
+  }
+};
 
   // Função genérica para renderizar resultados
   const renderizarResultado = (conteudo: string | null) => {

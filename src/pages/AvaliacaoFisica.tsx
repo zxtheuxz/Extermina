@@ -288,20 +288,36 @@ export function AvaliacaoFisica() {
   const uploadLaudo = async (userId: string): Promise<string | null> => {
     if (!laudoFile) return null;
 
-    const fileName = `${userId}/${Date.now()}-${laudoFile.name}`;
+    // Sanitizar o nome do arquivo removendo caracteres especiais
+    const sanitizedFileName = laudoFile.name
+      .replace(/[^a-zA-Z0-9.-]/g, '_')
+      .replace(/_{2,}/g, '_')
+      .toLowerCase();
+      
+    const fileName = `${userId}/${Date.now()}-${sanitizedFileName}`;
     
-    // Corrigindo o erro de linter removendo onUploadProgress
-    const { data, error } = await supabase.storage
-      .from('laudos')
-      .upload(fileName, laudoFile);
+    try {
+      const { data, error } = await supabase.storage
+        .from('laudos')
+        .upload(fileName, laudoFile, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
-    if (error) throw error;
-    
-    const { data: { publicUrl } } = supabase.storage
-      .from('laudos')
-      .getPublicUrl(fileName);
+      if (error) {
+        console.error('Erro no upload:', error);
+        throw new Error(`Falha no upload: ${error.message}`);
+      }
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('laudos')
+        .getPublicUrl(fileName);
 
-    return publicUrl;
+      return publicUrl;
+    } catch (error) {
+      console.error('Erro detalhado no upload:', error);
+      throw error;
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -363,6 +379,37 @@ export function AvaliacaoFisica() {
         ]);
 
       if (error) throw error;
+
+      // Se há laudo médico, criar entrada na tabela analises_medicamentos para aprovação
+      if (formData.sente_dores === 'sim' && formData.tem_laudo_medico === 'sim' && laudoUrl) {
+        const { error: analiseError } = await supabase
+          .from('analises_medicamentos')
+          .insert([
+            {
+              user_id: user.id,
+              tipo_documento: 'LAUDO_MEDICO',
+              documento_url: laudoUrl,
+              status: 'PENDENTE',
+              observacoes: `Laudo médico enviado via formulário de avaliação física. Usuário relatou sentir dores durante atividades físicas.`
+            }
+          ]);
+
+        if (analiseError) {
+          console.error('Erro ao criar análise do laudo:', analiseError);
+          // Não falhar o processo principal, apenas logar o erro
+        }
+
+        // Atualizar status do laudo no perfil
+        const { error: perfilError } = await supabase
+          .from('perfis')
+          .update({ laudo_aprovado: 'pendente' })
+          .eq('user_id', user.id);
+
+        if (perfilError) {
+          console.error('Erro ao atualizar perfil:', perfilError);
+          // Não falhar o processo principal, apenas logar o erro
+        }
+      }
       
       console.log('Formulário enviado com sucesso!');
       // Definir formSubmitted como true para mostrar a mensagem de sucesso

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { LogOut, Home, Settings, X, Sun, Moon, BarChart3 } from 'lucide-react';
+import { LogOut, Home, Settings, X, Sun, Moon, BarChart3, Image } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Header } from './Header';
 
 interface LayoutProps {
@@ -12,17 +13,36 @@ export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const { signOut } = useAuth();
   const isDark = theme === 'dark';
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const toggleMobileMenu = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
   const handleLogout = async () => {
-    // Implemente a lógica de logout aqui
-    navigate('/login');
+    setIsLoggingOut(true);
+    try {
+      console.log('Layout: Iniciando processo de logout...');
+      
+      // Usar o método signOut do AuthContext que já gerencia tudo
+      await signOut();
+      
+      // Pequeno delay para garantir que o estado foi limpo
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      console.log('Layout: Logout concluído, redirecionando...');
+      // Redirecionar para login após logout
+      navigate('/login', { replace: true });
+    } catch (error) {
+      console.error('Layout: Erro durante logout:', error);
+      // Mesmo com erro, redirecionar para login
+      navigate('/login', { replace: true });
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const getLinkClass = (path: string) => {
@@ -142,6 +162,17 @@ export function Layout({ children }: LayoutProps) {
               </div>
               <span className="truncate font-medium">Resultados</span>
             </Link>
+            
+            <Link to="/fotos" className={getLinkClass('/fotos')}>
+              <div className={`p-2 rounded-lg ${
+                location.pathname === '/fotos' 
+                  ? 'bg-white/20' 
+                  : isDark ? 'bg-gray-700/50' : 'bg-gray-100'
+              } transition-colors group-hover:scale-110`}>
+                <Image size={18} className="flex-shrink-0" />
+              </div>
+              <span className="truncate font-medium">Fotos</span>
+            </Link>
           </div>
           
           {/* Seção Configurações */}
@@ -185,18 +216,29 @@ export function Layout({ children }: LayoutProps) {
         <div className={`p-6 border-t ${isDark ? 'border-gray-700/50' : 'border-gray-200/50'}`}>
           <button 
             onClick={handleLogout}
+            disabled={isLoggingOut}
             className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 w-full ${
+              isLoggingOut
+                ? 'opacity-75 cursor-not-allowed'
+                : ''
+            } ${
               isDark 
                 ? 'text-red-400 hover:text-white hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40' 
                 : 'text-red-500 hover:text-white hover:bg-red-500 border border-red-200 hover:border-red-500'
-            } hover:scale-105 hover:shadow-lg`}
+            } ${!isLoggingOut ? 'hover:scale-105 hover:shadow-lg' : ''}`}
           >
             <div className={`p-2 rounded-lg ${
               isDark ? 'bg-red-500/10' : 'bg-red-50'
             } transition-colors group-hover:scale-110 group-hover:bg-red-500/20`}>
-              <LogOut size={18} className="flex-shrink-0" />
+              {isLoggingOut ? (
+                <div className="w-[18px] h-[18px] border-2 border-red-500 border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <LogOut size={18} className="flex-shrink-0" />
+              )}
             </div>
-            <span className="truncate font-medium">Sair</span>
+            <span className="truncate font-medium">
+              {isLoggingOut ? 'Saindo...' : 'Sair'}
+            </span>
           </button>
         </div>
       </aside>

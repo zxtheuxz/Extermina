@@ -17,8 +17,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Verificar se há uma preferência do sistema
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     
-    // Iniciar com o tema salvo, ou preferência do sistema, ou claro por padrão
-    return savedTheme || (prefersDark ? 'dark' : 'light');
+    // Iniciar com o tema salvo, ou claro por padrão (ignorando preferência do sistema)
+    return savedTheme || 'light';
   });
 
   useEffect(() => {

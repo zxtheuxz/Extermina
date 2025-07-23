@@ -13,6 +13,7 @@ import { jsPDF } from 'jspdf';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { pwaManager } from '../lib/pwaManager';
+import { useActivityLoggerContext } from '../providers/ActivityLoggerProvider';
 
 interface Perfil {
   sexo?: string;
@@ -48,6 +49,7 @@ export function Dashboard() {
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
   const navigate = useNavigate();
+  const activityLogger = useActivityLoggerContext();
   const [error, setError] = useState<string | null>(null);
   const [showResultadoFisica, setShowResultadoFisica] = useState(false);
   const [showResultadoNutricional, setShowResultadoNutricional] = useState(false);
@@ -89,15 +91,9 @@ export function Dashboard() {
             console.log('Role do usuário:', perfilData?.role);
             setPerfil(perfilData);
             
-            // Verificar se é admin ou preparador e redirecionar
-            if (perfilData?.role === 'admin') {
-              console.log('Usuário é admin, redirecionando...');
-              navigate('/admin/dashboard');
-              return;
-            } else if (perfilData?.role === 'preparador') {
-              console.log('Usuário é preparador, redirecionando...');
-              navigate('/preparador/dashboard');
-              return;
+            // Verificar se é admin ou preparador - não redirecionar, apenas marcar o role
+            if (perfilData?.role === 'admin' || perfilData?.role === 'preparador') {
+              console.log(`Usuário tem role: ${perfilData.role}`);
             }
             
             setRoleChecked(true);
@@ -209,6 +205,13 @@ export function Dashboard() {
             console.log('Não mostrando aviso: formulários completos =', ambosFormulariosPreenchidos, 'perfil liberado =', perfilData?.liberado);
             setMostrarAviso(false);
           }
+
+          // Registrar acesso ao dashboard
+          try {
+            await activityLogger.logPageVisit('Dashboard Principal', '/dashboard');
+          } catch (error) {
+            console.error('Erro ao registrar acesso ao dashboard:', error);
+          }
         }
       } catch (error) {
         console.error('Erro ao buscar usuário:', error);
@@ -219,7 +222,7 @@ export function Dashboard() {
     }
 
     getUser();
-  }, [navigate]);
+  }, [navigate, activityLogger]);
 
   // Detector de evento beforeinstallprompt - executa antes do componente ser montado
   useEffect(() => {
@@ -466,6 +469,69 @@ export function Dashboard() {
           </button>
         </div>
       </div>
+    );
+  }
+
+  // Renderização condicional baseada no role
+  if (perfil?.role === 'admin') {
+    return (
+      <Layout>
+        <div className="min-h-screen bg-gray-50 px-4 py-8">
+          <div className="max-w-7xl mx-auto">
+            <h1 className="text-3xl font-bold text-gray-900 mb-8">Dashboard Admin</h1>
+            <p className="text-gray-600">Bem-vindo ao painel administrativo!</p>
+            <p className="text-sm text-gray-500 mt-4">
+              Role: {perfil.role} | 
+              Usuário: {perfil.nome_completo || 'N/A'}
+            </p>
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Usuários</h3>
+                <p className="text-gray-600">Gerencie usuários do sistema</p>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Relatórios</h3>
+                <p className="text-gray-600">Visualize métricas e análises</p>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Configurações</h3>
+                <p className="text-gray-600">Configure o sistema</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+  
+  if (perfil?.role === 'preparador') {
+    return (
+      <Layout>
+        <div className="min-h-screen bg-gray-50 px-4 py-8">
+          <div className="max-w-7xl mx-auto">
+            <h1 className="text-3xl font-bold text-gray-900 mb-8">Dashboard Preparador</h1>
+            <p className="text-gray-600">Bem-vindo ao painel do preparador!</p>
+            <p className="text-sm text-gray-500 mt-4">
+              Role: {perfil.role} | 
+              Usuário: {perfil.nome_completo || 'N/A'}
+            </p>
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Análises</h3>
+                <p className="text-gray-600">Analise avaliações de clientes</p>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Clientes</h3>
+                <p className="text-gray-600">Gerencie seus clientes</p>
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Relatórios</h3>
+                <p className="text-gray-600">Acompanhe seu desempenho</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Layout>
     );
   }
 

@@ -1,5 +1,6 @@
 {
     "recommendations": [
-        "ms-vscode-remote.remote-wsl"
+        "ms-vscode-remote.remote-wsl",
+        "anthropic.claude-code"
     ]
 }

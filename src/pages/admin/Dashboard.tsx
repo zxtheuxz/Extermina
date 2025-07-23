@@ -1,501 +1,286 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { AdminLayout } from '../../components/AdminLayout';
-import { 
-  Users, 
-  UserCheck, 
-  UserX, 
-  Search, 
-  Filter,
-  Eye,
-  BarChart3,
-  Shield,
-  Settings,
-  TrendingUp,
-  FileText,
-  Clock,
-  CheckCircle,
-  XCircle
-} from 'lucide-react';
+import { User } from '@supabase/supabase-js';
+import { Shield, Users, BarChart3, Settings, FileText, Database, AlertTriangle, TrendingUp, Activity, Clock, LogOut, Phone } from 'lucide-react';
+import { ClientesList } from '../../components/ClientesList';
+import { TelefonesAutorizados } from '../../components/TelefonesAutorizados';
+import { useAuth } from '../../contexts/AuthContext';
 
-interface Usuario {
-  id: string;
-  email: string;
-  created_at: string;
-  perfil: {
-    nome_completo: string;
-    telefone: string | null;
-    role: string;
-    liberado: string | null;
-  };
-  avaliacoes: {
-    fisica: boolean;
-    nutricional: boolean;
-  };
-  analises: {
-    total: number;
-    pendentes: number;
-    aprovadas: number;
-    rejeitadas: number;
-  };
+interface Perfil {
+  nome_completo?: string;
+  role?: string;
 }
 
-interface Estatisticas {
-  totalUsuarios: number;
-  totalClientes: number;
-  totalPreparadores: number;
-  totalAdmins: number;
-  analisesPendentes: number;
-  analisesAprovadas: number;
-  analisesRejeitadas: number;
-}
-
-export function AdminDashboard() {
+export function Dashboard() {
   const navigate = useNavigate();
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [estatisticas, setEstatisticas] = useState<Estatisticas>({
-    totalUsuarios: 0,
-    totalClientes: 0,
-    totalPreparadores: 0,
-    totalAdmins: 0,
-    analisesPendentes: 0,
-    analisesAprovadas: 0,
-    analisesRejeitadas: 0
-  });
+  const { user: authUser, userProfile, isAuthenticated, hasRole } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [filtroRole, setFiltroRole] = useState<string>('TODOS');
-  const [termoPesquisa, setTermoPesquisa] = useState('');
+  const [user, setUser] = useState<User | null>(null);
+  const [perfil, setPerfil] = useState<Perfil | null>(null);
+  const [activeTab, setActiveTab] = useState<'usuarios' | 'telefones'>('usuarios');
+  const [stats, setStats] = useState({
+    totalUsuarios: 0,
+    usuariosAtivos: 0,
+    analisesHoje: 0,
+    analisesPendentes: 0,
+    sistemaStatus: 'online'
+  });
+
+  // Verificação adicional de segurança - verificar se usuário tem permissão admin
+  useEffect(() => {
+    if (!isAuthenticated || !userProfile || !hasRole(['admin'])) {
+      console.log('Admin Dashboard: Acesso negado, redirecionando para /staff');
+      navigate('/staff');
+      return;
+    }
+  }, [isAuthenticated, userProfile, hasRole, navigate]);
+
+  const handleClienteSelect = (cliente: any) => {
+    console.log('Cliente selecionado:', cliente);
+    // Aqui você pode adicionar ações específicas quando um cliente é selecionado
+  };
 
   useEffect(() => {
-    carregarDados();
+    async function loadData() {
+      try {
+        setLoading(true);
+        
+        // Buscar usuário atual
+        const { data: { user } } = await supabase.auth.getUser();
+        setUser(user);
+        
+        if (user) {
+          // Buscar perfil do admin
+          const { data: perfilData } = await supabase
+            .from('perfis')
+            .select('nome_completo, role')
+            .eq('user_id', user.id)
+            .single();
+          
+          setPerfil(perfilData);
+          
+          // Buscar estatísticas do sistema
+          const { count: totalUsuarios } = await supabase
+            .from('perfis')
+            .select('*', { count: 'exact', head: true });
+          
+          const { count: usuariosAtivos } = await supabase
+            .from('perfis')
+            .select('*', { count: 'exact', head: true })
+            .eq('liberado', 'sim');
+          
+          const { count: analisesHoje } = await supabase
+            .from('analises_medicamentos')
+            .select('*', { count: 'exact', head: true })
+            .gte('created_at', new Date().toISOString().split('T')[0]);
+
+          const { count: analisesPendentes } = await supabase
+            .from('analises_medicamentos')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'PENDENTE');
+          
+          setStats({
+            totalUsuarios: totalUsuarios || 0,
+            usuariosAtivos: usuariosAtivos || 0,
+            analisesHoje: analisesHoje || 0,
+            analisesPendentes: analisesPendentes || 0,
+            sistemaStatus: 'online'
+          });
+        }
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    loadData();
   }, []);
 
-  const carregarDados = async () => {
+  const getNomeAdmin = () => {
+    if (userProfile?.nome_completo) {
+      return userProfile.nome_completo.split(' ')[0];
+    }
+    if (perfil?.nome_completo) {
+      return perfil.nome_completo.split(' ')[0];
+    }
+    return authUser?.email?.split('@')[0] || user?.email?.split('@')[0] || 'Admin';
+  };
+
+  const handleLogout = async () => {
     try {
-      await Promise.all([
-        carregarUsuarios(),
-        carregarEstatisticas()
-      ]);
+      await supabase.auth.signOut();
+      navigate('/staff');
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
-    } finally {
-      setLoading(false);
+      console.error('Erro ao fazer logout:', error);
     }
-  };
-
-  const carregarUsuarios = async () => {
-    try {
-      // Buscar perfis com informações dos usuários
-      const { data: perfis, error: perfisError } = await supabase
-        .from('perfis')
-        .select(`
-          user_id,
-          nome_completo,
-          telefone,
-          role,
-          liberado
-        `);
-
-      if (perfisError) throw perfisError;
-
-      // Buscar avaliações físicas e nutricionais
-      const [avaliacoesFisicas, avaliacoesNutricionais, analisesMedicamentos] = await Promise.all([
-        supabase.from('avaliacao_fisica').select('user_id'),
-        supabase.from('avaliacao_nutricional').select('user_id'),
-        supabase.from('analises_medicamentos').select('user_id, status')
-      ]);
-
-      // Mapear dados dos perfis com informações complementares
-      const usuariosMapeados = (perfis || []).map((perfil) => {
-        const temAvaliacaoFisica = avaliacoesFisicas.data?.some(af => af.user_id === perfil.user_id) || false;
-        const temAvaliacaoNutricional = avaliacoesNutricionais.data?.some(an => an.user_id === perfil.user_id) || false;
-        
-        const analisesUsuario = analisesMedicamentos.data?.filter(am => am.user_id === perfil.user_id) || [];
-        const analises = {
-          total: analisesUsuario.length,
-          pendentes: analisesUsuario.filter(a => a.status === 'PENDENTE').length,
-          aprovadas: analisesUsuario.filter(a => a.status === 'APROVADO').length,
-          rejeitadas: analisesUsuario.filter(a => a.status === 'REJEITADO').length
-        };
-
-        return {
-          id: perfil.user_id,
-          email: 'Email não disponível', // Será preenchido depois
-          created_at: new Date().toISOString(),
-          perfil: {
-            nome_completo: perfil.nome_completo || 'Nome não informado',
-            telefone: perfil.telefone,
-            role: perfil.role || 'cliente',
-            liberado: perfil.liberado
-          },
-          avaliacoes: {
-            fisica: temAvaliacaoFisica,
-            nutricional: temAvaliacaoNutricional
-          },
-          analises
-        };
-      });
-
-      // Tentar buscar emails usando RPC para cada usuário
-      for (const usuario of usuariosMapeados) {
-        try {
-          const { data: userData } = await supabase.rpc('get_user_info', { user_uuid: usuario.id });
-          if (userData && userData[0]) {
-            usuario.email = userData[0].email || 'Email não disponível';
-            usuario.created_at = userData[0].created_at || usuario.created_at;
-          }
-        } catch (error) {
-          console.warn(`Erro ao buscar dados do usuário ${usuario.id}:`, error);
-        }
-      }
-
-      setUsuarios(usuariosMapeados);
-    } catch (error) {
-      console.error('Erro ao carregar usuários:', error);
-      // Fallback: usar apenas dados dos perfis
-      const { data: perfis } = await supabase.from('perfis').select('*');
-      if (perfis) {
-        const usuariosFallback = perfis.map(perfil => ({
-          id: perfil.user_id,
-          email: 'Email não disponível',
-          created_at: new Date().toISOString(),
-          perfil: {
-            nome_completo: perfil.nome_completo || 'Nome não informado',
-            telefone: perfil.telefone,
-            role: perfil.role || 'cliente',
-            liberado: perfil.liberado
-          },
-          avaliacoes: { fisica: false, nutricional: false },
-          analises: { total: 0, pendentes: 0, aprovadas: 0, rejeitadas: 0 }
-        }));
-        setUsuarios(usuariosFallback);
-      }
-    }
-  };
-
-  const carregarEstatisticas = async () => {
-    try {
-      const [perfisResult, analisesResult] = await Promise.all([
-        supabase.from('perfis').select('role'),
-        supabase.from('analises_medicamentos').select('status')
-      ]);
-
-      const perfis = perfisResult.data || [];
-      const analises = analisesResult.data || [];
-
-      const stats = {
-        totalUsuarios: perfis.length,
-        totalClientes: perfis.filter(p => p.role === 'cliente').length,
-        totalPreparadores: perfis.filter(p => p.role === 'preparador').length,
-        totalAdmins: perfis.filter(p => p.role === 'admin').length,
-        analisesPendentes: analises.filter(a => a.status === 'PENDENTE').length,
-        analisesAprovadas: analises.filter(a => a.status === 'APROVADO').length,
-        analisesRejeitadas: analises.filter(a => a.status === 'REJEITADO').length
-      };
-
-      setEstatisticas(stats);
-    } catch (error) {
-      console.error('Erro ao carregar estatísticas:', error);
-    }
-  };
-
-  const usuariosFiltrados = usuarios.filter(usuario => {
-    const matchRole = filtroRole === 'TODOS' || usuario.perfil.role === filtroRole.toLowerCase();
-    const matchPesquisa = termoPesquisa === '' || 
-      usuario.perfil.nome_completo.toLowerCase().includes(termoPesquisa.toLowerCase()) ||
-      usuario.email.toLowerCase().includes(termoPesquisa.toLowerCase());
-    
-    return matchRole && matchPesquisa;
-  });
-
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return 'bg-red-100 text-red-800 border-red-200';
-      case 'preparador':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'cliente':
-        return 'bg-green-100 text-green-800 border-green-200';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  const getRoleIcon = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return <Shield className="w-4 h-4" />;
-      case 'preparador':
-        return <UserCheck className="w-4 h-4" />;
-      case 'cliente':
-        return <Users className="w-4 h-4" />;
-      default:
-        return <Users className="w-4 h-4" />;
-    }
-  };
-
-  const formatarData = (dataString: string) => {
-    return new Date(dataString).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   return (
-    <AdminLayout>
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard Administrativo</h1>
-          <p className="mt-2 text-gray-600">
-            Gerencie usuários, roles e monitore o sistema
-          </p>
-        </div>
-
-        {/* Estatísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
+    <div className="min-h-screen bg-slate-50">
+      {/* Header Admin */}
+      <header className="bg-white shadow-sm border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
             <div className="flex items-center">
-              <Users className="h-8 w-8 text-blue-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total de Usuários</p>
-                <p className="text-2xl font-bold text-gray-900">{estatisticas.totalUsuarios}</p>
+              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-slate-700 rounded-xl flex items-center justify-center mr-3">
+                <Shield className="w-5 h-5 text-white" />
               </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <UserCheck className="h-8 w-8 text-green-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Clientes</p>
-                <p className="text-2xl font-bold text-gray-900">{estatisticas.totalClientes}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <Shield className="h-8 w-8 text-blue-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Preparadores</p>
-                <p className="text-2xl font-bold text-gray-900">{estatisticas.totalPreparadores}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <Clock className="h-8 w-8 text-yellow-500" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Análises Pendentes</p>
-                <p className="text-2xl font-bold text-gray-900">{estatisticas.analisesPendentes}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Métricas de Análises */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Análises Aprovadas</p>
-                <p className="text-2xl font-bold text-green-600">{estatisticas.analisesAprovadas}</p>
-              </div>
-              <CheckCircle className="h-8 w-8 text-green-500" />
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Análises Rejeitadas</p>
-                <p className="text-2xl font-bold text-red-600">{estatisticas.analisesRejeitadas}</p>
-              </div>
-              <XCircle className="h-8 w-8 text-red-500" />
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Taxa de Aprovação</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {estatisticas.analisesAprovadas + estatisticas.analisesRejeitadas > 0 
-                    ? Math.round((estatisticas.analisesAprovadas / (estatisticas.analisesAprovadas + estatisticas.analisesRejeitadas)) * 100)
-                    : 0}%
+                <h1 className="text-xl font-bold text-slate-900">
+                  Admin Dashboard
+                </h1>
+                <p className="text-sm text-slate-600">
+                  Bem-vindo, {getNomeAdmin()}
                 </p>
               </div>
-              <TrendingUp className="h-8 w-8 text-blue-500" />
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span className="text-xs text-slate-600">Online</span>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                Sair
+              </button>
             </div>
           </div>
         </div>
+      </header>
 
-        {/* Filtros e Pesquisa */}
-        <div className="bg-white rounded-lg shadow mb-6 p-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                <input
-                  type="text"
-                  placeholder="Pesquisar por nome ou email..."
-                  value={termoPesquisa}
-                  onChange={(e) => setTermoPesquisa(e.target.value)}
-                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
+      <div className="px-4 py-8">
+        <div className="max-w-7xl mx-auto">
+          
+          {/* Status Info */}
+          <div className="mb-8">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+              <span className="text-sm text-slate-600">Sistema Online</span>
+              <span className="text-xs text-slate-400 ml-2">
+                Última atualização: {new Date().toLocaleTimeString()}
+              </span>
+            </div>
+          </div>
+
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-600">Total de Usuários</p>
+                  <p className="text-3xl font-bold text-slate-900">{stats.totalUsuarios}</p>
+                </div>
+                <Users className="w-8 h-8 text-blue-600" />
+              </div>
+              <div className="mt-4 flex items-center">
+                <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
+                <span className="text-sm text-green-600">+12% este mês</span>
               </div>
             </div>
-            
-            <div className="sm:w-48">
-              <div className="relative">
-                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
-                <select
-                  value={filtroRole}
-                  onChange={(e) => setFiltroRole(e.target.value)}
-                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none"
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-600">Usuários Ativos</p>
+                  <p className="text-3xl font-bold text-slate-900">{stats.usuariosAtivos}</p>
+                </div>
+                <Activity className="w-8 h-8 text-green-600" />
+              </div>
+              <div className="mt-4 flex items-center">
+                <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
+                <span className="text-sm text-green-600">+8% esta semana</span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-600">Análises Hoje</p>
+                  <p className="text-3xl font-bold text-slate-900">{stats.analisesHoje}</p>
+                </div>
+                <FileText className="w-8 h-8 text-orange-600" />
+              </div>
+              <div className="mt-4 flex items-center">
+                <Clock className="w-4 h-4 text-slate-500 mr-1" />
+                <span className="text-sm text-slate-600">Últimas 24h</span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-600">Análises Pendentes</p>
+                  <p className="text-3xl font-bold text-slate-900">{stats.analisesPendentes}</p>
+                </div>
+                <AlertTriangle className="w-8 h-8 text-amber-600" />
+              </div>
+              <div className="mt-4 flex items-center">
+                <Clock className="w-4 h-4 text-amber-500 mr-1" />
+                <span className="text-sm text-amber-600">Requer atenção</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Tabs Navigation */}
+          <div className="mb-8">
+            <div className="border-b border-gray-200">
+              <nav className="-mb-px flex space-x-8">
+                <button
+                  onClick={() => setActiveTab('usuarios')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'usuarios'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
                 >
-                  <option value="TODOS">Todos os Roles</option>
-                  <option value="cliente">Clientes</option>
-                  <option value="preparador">Preparadores</option>
-                  <option value="admin">Administradores</option>
-                </select>
-              </div>
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    Gerenciamento de Usuários
+                  </div>
+                </button>
+                <button
+                  onClick={() => setActiveTab('telefones')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'telefones'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-4 h-4" />
+                    Telefones Autorizados
+                  </div>
+                </button>
+              </nav>
             </div>
           </div>
-        </div>
 
-        {/* Lista de Usuários */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">
-              Usuários do Sistema ({usuariosFiltrados.length})
-            </h3>
+          {/* Tab Content */}
+          <div className="w-full">
+            {activeTab === 'usuarios' && (
+              <ClientesList onClienteSelect={handleClienteSelect} />
+            )}
+            
+            {activeTab === 'telefones' && (
+              <TelefonesAutorizados />
+            )}
           </div>
 
-          {usuariosFiltrados.length === 0 ? (
-            <div className="p-8 text-center">
-              <Users className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhum usuário encontrado</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                Tente ajustar os filtros de pesquisa.
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Usuário
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Role
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Avaliações
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Análises
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Cadastro
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Ações
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {usuariosFiltrados.map((usuario) => (
-                    <tr key={usuario.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {usuario.perfil.nome_completo}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {usuario.email}
-                          </div>
-                          {usuario.perfil.telefone && (
-                            <div className="text-sm text-gray-500">
-                              {usuario.perfil.telefone}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border ${getRoleColor(usuario.perfil.role)}`}>
-                          {getRoleIcon(usuario.perfil.role)}
-                          {usuario.perfil.role.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex gap-2">
-                          <span className={`inline-flex items-center px-2 py-1 rounded text-xs ${
-                            usuario.avaliacoes.fisica 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-gray-100 text-gray-500'
-                          }`}>
-                            Física
-                          </span>
-                          <span className={`inline-flex items-center px-2 py-1 rounded text-xs ${
-                            usuario.avaliacoes.nutricional 
-                              ? 'bg-blue-100 text-blue-800' 
-                              : 'bg-gray-100 text-gray-500'
-                          }`}>
-                            Nutricional
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {usuario.analises.total > 0 ? (
-                          <div className="space-y-1">
-                            <div className="text-xs">
-                              Total: {usuario.analises.total}
-                            </div>
-                            {usuario.analises.pendentes > 0 && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-yellow-100 text-yellow-800">
-                                {usuario.analises.pendentes} pendente(s)
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          'Nenhuma'
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatarData(usuario.created_at)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => navigate(`/admin/usuario/${usuario.id}`)}
-                          className="text-purple-600 hover:text-purple-800 flex items-center gap-1"
-                        >
-                          <Eye className="w-4 h-4" />
-                          Ver Detalhes
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
       </div>
-    </AdminLayout>
+    </div>
   );
 }
