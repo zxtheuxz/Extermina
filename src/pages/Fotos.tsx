@@ -23,6 +23,7 @@ interface PerfilFotos {
   foto_costas_url?: string;
   foto_lateral_direita_url?: string;
   foto_lateral_esquerda_url?: string;
+  foto_abertura_url?: string;
 }
 
 interface LaudoMedico {
@@ -89,7 +90,8 @@ export function Fotos() {
               foto_frente_url,
               foto_costas_url,
               foto_lateral_direita_url,
-              foto_lateral_esquerda_url
+              foto_lateral_esquerda_url,
+              foto_abertura_url
             `)
             .eq('user_id', user.id)
             .single();
@@ -169,6 +171,13 @@ export function Fotos() {
       url: perfil?.foto_lateral_esquerda_url,
       position: 'lateral_esquerda',
       uploaded: !!perfil?.foto_lateral_esquerda_url
+    },
+    {
+      id: 'abertura',
+      title: 'Foto de Abertura',
+      url: perfil?.foto_abertura_url,
+      position: 'abertura',
+      uploaded: !!perfil?.foto_abertura_url
     }
   ];
 
@@ -248,16 +257,17 @@ export function Fotos() {
             <p className={`text-lg ${
               isDarkMode ? 'text-gray-400' : 'text-gray-600'
             }`}>
-              Acompanhe suas fotos de progresso e documentos médicos
+              Acompanhe suas fotos de progresso e laudos médicos
             </p>
           </div>
 
-          {/* Status das Fotos */}
-          <div className={`mb-8 p-6 rounded-2xl shadow-lg border ${semFotosELaudos ? 'blur-sm' : ''} ${
-            isDarkMode 
-              ? 'bg-gray-900 border-gray-700' 
-              : 'bg-white border-gray-200'
-          }`}>
+          {/* Conteúdo Principal */}
+              {/* Status das Fotos */}
+              <div className={`mb-8 p-6 rounded-2xl shadow-lg border ${semFotosELaudos ? 'blur-sm' : ''} ${
+                isDarkMode 
+                  ? 'bg-gray-900 border-gray-700' 
+                  : 'bg-white border-gray-200'
+              }`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className={`text-2xl font-bold ${
                 isDarkMode ? 'text-white' : 'text-gray-900'
@@ -302,7 +312,7 @@ export function Fotos() {
             </div>
 
             {/* Grid de Fotos */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
               {fotos.map((foto) => (
                 <div
                   key={foto.id}

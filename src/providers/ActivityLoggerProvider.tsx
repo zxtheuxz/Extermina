@@ -1,4 +1,4 @@
-import React, { useEffect, createContext, useContext, useRef } from 'react';
+import React, { useEffect, createContext, useContext, useRef, useMemo } from 'react';
 import { useActivityLogger } from '../hooks/useActivityLogger';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -29,7 +29,9 @@ export function ActivityLoggerProvider({ children }: ActivityLoggerProviderProps
     if (isAuthenticated && user) {
       // Verificar se já logou para este usuário
       if (user.id !== lastUserId.current) {
-        console.log('ActivityLogger: Novo usuário autenticado, registrando login');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('ActivityLogger: Novo usuário autenticado, registrando login');
+        }
         lastUserId.current = user.id;
         hasLoggedLogin.current = false;
       }
@@ -42,13 +44,15 @@ export function ActivityLoggerProvider({ children }: ActivityLoggerProviderProps
         setTimeout(async () => {
           try {
             await activityLogger.logLogin();
-            console.log('ActivityLogger: Login registrado com sucesso');
+            if (process.env.NODE_ENV === 'development') {
+              console.log('ActivityLogger: Login registrado com sucesso');
+            }
           } catch (error) {
             console.error('Erro ao registrar login:', error);
             // Permitir nova tentativa em caso de erro
             hasLoggedLogin.current = false;
           }
-        }, 1000);
+        }, 500); // Reduzido de 1000ms para 500ms
       }
     } else if (!isAuthenticated) {
       // Reset quando usuário faz logout
@@ -58,18 +62,33 @@ export function ActivityLoggerProvider({ children }: ActivityLoggerProviderProps
   }, [isAuthenticated, user]); // REMOVIDO activityLogger da dependência
 
   useEffect(() => {
-    // Interceptar antes do unload da página para registrar logout
-    const handleBeforeUnload = async () => {
-      if (user) {
-        // Registrar que o usuário está saindo (fechando aba/navegador)
-        navigator.sendBeacon('/api/log-activity', JSON.stringify({
-          action: 'page_unload',
-          userId: user.id
-        }));
+    // Interceptar antes do unload da página APENAS para fechamento real
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Só registrar se realmente estiver fechando a aba/navegador
+      // Não registrar para navegação entre páginas da aplicação
+      if (user && !event.defaultPrevented) {
+        // Usar sendBeacon apenas se for um fechamento real
+        try {
+          navigator.sendBeacon('/api/log-activity', JSON.stringify({
+            action: 'page_unload',
+            userId: user.id,
+            timestamp: new Date().toISOString()
+          }));
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log('ActivityLogger: Registrando saída da aplicação');
+          }
+        } catch (error) {
+          // Silenciosamente ignorar erros de sendBeacon
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('ActivityLogger: Erro ao enviar beacon:', error);
+          }
+        }
       }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    // Usar passive listener para não interferir na performance
+    window.addEventListener('beforeunload', handleBeforeUnload, { passive: true });
 
     // Cleanup
     return () => {
@@ -77,8 +96,11 @@ export function ActivityLoggerProvider({ children }: ActivityLoggerProviderProps
     };
   }, [user]);
 
+  // Memoizar o valor do contexto para evitar re-renders
+  const contextValue = useMemo(() => activityLogger, [activityLogger]);
+
   return (
-    <ActivityLoggerContext.Provider value={activityLogger}>
+    <ActivityLoggerContext.Provider value={contextValue}>
       {children}
     </ActivityLoggerContext.Provider>
   );

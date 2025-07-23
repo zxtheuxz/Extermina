@@ -15,6 +15,11 @@ import { ptBR } from 'date-fns/locale';
 import { pwaManager } from '../lib/pwaManager';
 import { useActivityLoggerContext } from '../providers/ActivityLoggerProvider';
 
+// Helper para logs condicionais de debug (preserva stack trace)
+const debugLog = process.env.NODE_ENV === 'development' 
+  ? console.log.bind(console) 
+  : () => {};
+
 interface Perfil {
   sexo?: string;
   nome_completo?: string;
@@ -66,12 +71,12 @@ export function Dashboard() {
     async function getUser() {
       try {
         setLoading(true);
-        console.log('Buscando usuário...');
+        debugLog('Buscando usuário...');
         const { data: { user } } = await supabase.auth.getUser();
         setUser(user);
         
         if (user) {
-          console.log("Usuário autenticado:", user.id);
+          debugLog("Usuário autenticado:", user.id);
 
           // Buscar o perfil do usuário para obter o sexo, nome completo e role
           const { data: perfilData, error: perfilError } = await supabase
@@ -84,16 +89,16 @@ export function Dashboard() {
             console.error('Erro ao buscar perfil do usuário:', perfilError);
             setError('Erro ao carregar seu perfil. Por favor, tente novamente mais tarde.');
           } else {
-            console.log('Perfil do usuário:', perfilData);
-            console.log('Sexo do usuário:', perfilData?.sexo);
-            console.log('Tipo do sexo:', typeof perfilData?.sexo);
-            console.log('Status de liberação:', perfilData?.liberado);
-            console.log('Role do usuário:', perfilData?.role);
+            debugLog('Perfil do usuário:', perfilData);
+            debugLog('Sexo do usuário:', perfilData?.sexo);
+            debugLog('Tipo do sexo:', typeof perfilData?.sexo);
+            debugLog('Status de liberação:', perfilData?.liberado);
+            debugLog('Role do usuário:', perfilData?.role);
             setPerfil(perfilData);
             
             // Verificar se é admin ou preparador - não redirecionar, apenas marcar o role
             if (perfilData?.role === 'admin' || perfilData?.role === 'preparador') {
-              console.log(`Usuário tem role: ${perfilData.role}`);
+              debugLog(`Usuário tem role: ${perfilData.role}`);
             }
             
             setRoleChecked(true);
@@ -102,11 +107,11 @@ export function Dashboard() {
             if (perfilData?.liberado && typeof perfilData.liberado === 'string') {
               const liberado = perfilData.liberado.toLowerCase() === 'sim';
               setPerfilLiberado(liberado);
-              console.log('perfilLiberado definido como:', liberado);
+              debugLog('perfilLiberado definido como:', liberado);
             } else {
               // Não forçar mais para true, respeitar o valor do banco de dados
               setPerfilLiberado(false);
-              console.log('perfilLiberado definido como:', false);
+              debugLog('perfilLiberado definido como:', false);
             }
           }
 
@@ -121,8 +126,8 @@ export function Dashboard() {
           }
           
           const temAvaliacaoFisica = countFisica !== null && countFisica > 0;
-          console.log('Contagem de avaliações físicas:', countFisica);
-          console.log('Tem avaliação física:', temAvaliacaoFisica);
+          debugLog('Contagem de avaliações físicas:', countFisica);
+          debugLog('Tem avaliação física:', temAvaliacaoFisica);
 
           // Verificar se o usuário já tem avaliações nutricionais - usando contagem para maior precisão
           // Verificar primeiro na tabela avaliacao_nutricional
@@ -140,7 +145,7 @@ export function Dashboard() {
           
           // Verificar também na tabela avaliacao_nutricional_feminino
           // Verificar independente do sexo para garantir que o formulário seja contabilizado
-          console.log('Verificando avaliação nutricional feminina independente do sexo');
+          debugLog('Verificando avaliação nutricional feminina independente do sexo');
           
           // Primeiro vamos verificar se o registro existe
           const { data: avaliacaoFem, error: errorFemGet } = await supabase
@@ -148,7 +153,7 @@ export function Dashboard() {
             .select('id, user_id')
             .eq('user_id', user.id);
             
-          console.log('Avaliação nutricional feminina encontrada:', avaliacaoFem);
+          debugLog('Avaliação nutricional feminina encontrada:', avaliacaoFem);
           
           if (errorFemGet) {
             console.error('Erro ao buscar avaliação nutricional feminina:', errorFemGet);
@@ -160,13 +165,13 @@ export function Dashboard() {
             .select('*', { count: 'exact', head: true })
             .eq('user_id', user.id);
           
-          console.log('Contagem de avaliações nutricionais femininas:', countNutriFem);
+          debugLog('Contagem de avaliações nutricionais femininas:', countNutriFem);
           
           if (errorNutriFemCount) {
             console.error('Erro ao contar avaliações nutricionais femininas:', errorNutriFemCount);
           } else {
             countNutricional += countNutriFem || 0;
-            console.log('Contagem nutricional atualizada para:', countNutricional);
+            debugLog('Contagem nutricional atualizada para:', countNutricional);
           }
 
           // Verificar se o usuário tem avaliação nutricional
@@ -178,8 +183,8 @@ export function Dashboard() {
             temAvaliacaoNutricional = true;
           }
           
-          console.log('Contagem total de avaliações nutricionais:', countNutricional);
-          console.log('Tem avaliação nutricional (com verificação direta):', temAvaliacaoNutricional);
+          debugLog('Contagem total de avaliações nutricionais:', countNutricional);
+          debugLog('Tem avaliação nutricional (com verificação direta):', temAvaliacaoNutricional);
 
           // Atualizar o estado das avaliações
           setProgramacoes({
@@ -187,22 +192,22 @@ export function Dashboard() {
             nutricional: temAvaliacaoNutricional
           });
           
-          console.log('Programações definidas como:', { fisica: temAvaliacaoFisica, nutricional: temAvaliacaoNutricional });
+          debugLog('Programações definidas como:', { fisica: temAvaliacaoFisica, nutricional: temAvaliacaoNutricional });
           
           // Verificar se ambos os formulários estão preenchidos para mostrar o aviso
           const ambosFormulariosPreenchidos = temAvaliacaoFisica && temAvaliacaoNutricional;
           setFormulariosCompletos(ambosFormulariosPreenchidos);
           
-          console.log('Ambos formulários preenchidos:', ambosFormulariosPreenchidos);
-          console.log('Perfil liberado:', perfilData?.liberado);
+          debugLog('Ambos formulários preenchidos:', ambosFormulariosPreenchidos);
+          debugLog('Perfil liberado:', perfilData?.liberado);
           
           // Verificação mais rigorosa para mostrar o aviso apenas quando ambos os formulários estiverem preenchidos
           // e o perfil estiver liberado com o valor 'sim'
           if (ambosFormulariosPreenchidos && perfilData?.liberado?.toLowerCase() === 'sim') {
-            console.log('Ambos os formulários estão preenchidos e perfil liberado, mostrando aviso');
+            debugLog('Ambos os formulários estão preenchidos e perfil liberado, mostrando aviso');
             setMostrarAviso(true);
           } else {
-            console.log('Não mostrando aviso: formulários completos =', ambosFormulariosPreenchidos, 'perfil liberado =', perfilData?.liberado);
+            debugLog('Não mostrando aviso: formulários completos =', ambosFormulariosPreenchidos, 'perfil liberado =', perfilData?.liberado);
             setMostrarAviso(false);
           }
 
@@ -226,11 +231,11 @@ export function Dashboard() {
 
   // Detector de evento beforeinstallprompt - executa antes do componente ser montado
   useEffect(() => {
-    console.log('[Dashboard] Configurando detecção de PWA...');
+    debugLog('[Dashboard] Configurando detecção de PWA...');
     
     // Força mostrar o botão de instalação se o navegador suportar PWA
     if (pwaManager.forceShowInstallButton()) {
-      console.log('[Dashboard] Navegador suporta PWA, mostrando botão de instalação');
+      debugLog('[Dashboard] Navegador suporta PWA, mostrando botão de instalação');
       setShowInstallButton(true);
     }
     
@@ -244,12 +249,12 @@ export function Dashboard() {
       
       // Verifica se o app pode ser instalado usando o localStorage
       if (localStorage.getItem('pwaInstallable') === 'true') {
-        console.log('[Dashboard] PWA é instalável de acordo com localStorage');
+        debugLog('[Dashboard] PWA é instalável de acordo com localStorage');
         setShowInstallButton(true);
         
         // Se temos o evento global, podemos usá-lo
         if (window._pwaPrompt) {
-          console.log('[Dashboard] Evento global _pwaPrompt encontrado, salvando no estado');
+          debugLog('[Dashboard] Evento global _pwaPrompt encontrado, salvando no estado');
           setDeferredPrompt(window._pwaPrompt);
         }
       }
@@ -260,7 +265,7 @@ export function Dashboard() {
     
     // Listener para o evento customizado
     const handlePwaPromptAvailable = () => {
-      console.log('[Dashboard] Evento pwaPromptAvailable recebido');
+      debugLog('[Dashboard] Evento pwaPromptAvailable recebido');
       setShowInstallButton(true);
       if (window._pwaPrompt) {
         setDeferredPrompt(window._pwaPrompt);
@@ -269,7 +274,7 @@ export function Dashboard() {
     
     // Listener para quando o PWA é instalado
     const handlePwaInstalled = () => {
-      console.log('[Dashboard] Evento pwaInstalled recebido');
+      debugLog('[Dashboard] Evento pwaInstalled recebido');
       setShowInstallButton(false);
       setDeferredPrompt(null);
     };
@@ -285,7 +290,7 @@ export function Dashboard() {
     
     // Adiciona listeners locais para garantir sincronização do estado
     const handleBeforeInstallPrompt = (e: Event) => {
-      console.log('[Dashboard] Evento beforeinstallprompt capturado localmente');
+      debugLog('[Dashboard] Evento beforeinstallprompt capturado localmente');
       setShowInstallButton(true);
       setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
@@ -294,7 +299,7 @@ export function Dashboard() {
     
     // Atualiza estado quando o app for instalado
     window.addEventListener('appinstalled', () => {
-      console.log('[Dashboard] PWA instalado, atualizando estado');
+      debugLog('[Dashboard] PWA instalado, atualizando estado');
       setShowInstallButton(false);
       setDeferredPrompt(null);
     });
@@ -311,13 +316,13 @@ export function Dashboard() {
   // Força exibição do botão de instalação quando o componente for montado
   useEffect(() => {
     if (!loading && user) {
-      console.log('[Dashboard] Usuário logado, verificando dispositivo para botão de instalação');
+      debugLog('[Dashboard] Usuário logado, verificando dispositivo para botão de instalação');
       
       // Força mostrar o botão de instalação baseado no tipo de dispositivo
       const isMobile = pwaManager.isMobileDevice();
       
       if (isMobile) {
-        console.log('[Dashboard] Dispositivo móvel detectado, priorizando botão de instalação');
+        debugLog('[Dashboard] Dispositivo móvel detectado, priorizando botão de instalação');
         setShowInstallButton(true);
         
         // Em dispositivos móveis, vamos verificar a cada 5 segundos em caso de evento perdido
@@ -329,7 +334,7 @@ export function Dashboard() {
         
         return () => clearInterval(mobileInterval);
       } else if (pwaManager.forceShowInstallButton()) {
-        console.log('[Dashboard] Desktop com suporte a PWA, mostrando botão de instalação');
+        debugLog('[Dashboard] Desktop com suporte a PWA, mostrando botão de instalação');
         setShowInstallButton(true);
       }
     }
@@ -337,17 +342,17 @@ export function Dashboard() {
 
   // Função para instalar o PWA
   const installPWA = async () => {
-    console.log('[Dashboard] Tentando instalar PWA');
-    console.log('[Dashboard] deferredPrompt:', deferredPrompt ? 'disponível' : 'não disponível');
-    console.log('[Dashboard] Evento global:', window._pwaPrompt ? 'disponível' : 'não disponível');
+    debugLog('[Dashboard] Tentando instalar PWA');
+    debugLog('[Dashboard] deferredPrompt:', deferredPrompt ? 'disponível' : 'não disponível');
+    debugLog('[Dashboard] Evento global:', window._pwaPrompt ? 'disponível' : 'não disponível');
     
     // Tenta usar o evento salvo no componente
     if (deferredPrompt) {
       try {
-        console.log('[Dashboard] Usando evento do estado para instalação');
+        debugLog('[Dashboard] Usando evento do estado para instalação');
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
-        console.log(`[Dashboard] Usuário ${outcome === 'accepted' ? 'aceitou' : 'recusou'} a instalação`);
+        debugLog(`[Dashboard] Usuário ${outcome === 'accepted' ? 'aceitou' : 'recusou'} a instalação`);
         // Limpa após o uso
         setDeferredPrompt(null);
       } catch (error) {
@@ -357,10 +362,10 @@ export function Dashboard() {
     // Tenta usar o evento global
     else if (window._pwaPrompt) {
       try {
-        console.log('[Dashboard] Usando evento global para instalação');
+        debugLog('[Dashboard] Usando evento global para instalação');
         window._pwaPrompt.prompt();
         const { outcome } = await window._pwaPrompt.userChoice;
-        console.log(`[Dashboard] Usuário ${outcome === 'accepted' ? 'aceitou' : 'recusou'} a instalação`);
+        debugLog(`[Dashboard] Usuário ${outcome === 'accepted' ? 'aceitou' : 'recusou'} a instalação`);
         window._pwaPrompt = null;
         localStorage.removeItem('pwaInstallable');
       } catch (error) {
@@ -369,14 +374,14 @@ export function Dashboard() {
     } 
     // Sem evento disponível
     else {
-      console.log('[Dashboard] Nenhum evento disponível, mostrando instrução manual');
+      debugLog('[Dashboard] Nenhum evento disponível, mostrando instrução manual');
       alert('Para instalar o app, use a opção "Adicionar à tela inicial" ou "Instalar" no menu do seu navegador');
     }
   };
 
   // Função para ir para a aba de resultados
   const irParaResultados = () => {
-    console.log('Navegando para a página de resultados');
+    debugLog('Navegando para a página de resultados');
     navigate('/resultados');
     setMostrarAviso(false);
   };
@@ -384,10 +389,10 @@ export function Dashboard() {
   // Efeito para esconder o aviso quando a aba de resultados estiver ativa
   useEffect(() => {
     if (formulariosCompletos && perfil?.liberado?.toLowerCase() === 'sim') {
-      console.log('Formulários completos e perfil liberado, mostrando aviso');
+      debugLog('Formulários completos e perfil liberado, mostrando aviso');
       setMostrarAviso(true);
     } else {
-      console.log('Condições não atendidas, escondendo aviso');
+      debugLog('Condições não atendidas, escondendo aviso');
       setMostrarAviso(false);
     }
   }, [formulariosCompletos, perfil?.liberado]);
@@ -406,19 +411,19 @@ export function Dashboard() {
 
   // Função para determinar qual formulário nutricional mostrar com base no sexo
   const getNutricionalLink = () => {
-    console.log('Perfil completo:', perfil);
-    console.log('Sexo do usuário:', perfil?.sexo);
-    console.log('Tipo do sexo:', typeof perfil?.sexo);
-    console.log('Sexo em lowercase:', perfil?.sexo?.toLowerCase());
+    debugLog('Perfil completo:', perfil);
+    debugLog('Sexo do usuário:', perfil?.sexo);
+    debugLog('Tipo do sexo:', typeof perfil?.sexo);
+    debugLog('Sexo em lowercase:', perfil?.sexo?.toLowerCase());
     
     if (perfil?.sexo?.toLowerCase() === 'feminino') {
-      console.log('Redirecionando para formulário feminino');
+      debugLog('Redirecionando para formulário feminino');
       return '/avaliacao-nutricional/feminino';
     } else if (perfil?.sexo?.toLowerCase() === 'masculino') {
-      console.log('Redirecionando para formulário masculino');
+      debugLog('Redirecionando para formulário masculino');
       return '/avaliacao-nutricional/masculino';
     } else {
-      console.log('Sexo não definido, redirecionando para configurações');
+      debugLog('Sexo não definido, redirecionando para configurações');
       setError('Por favor, configure seu perfil com o sexo antes de prosseguir.');
       return '/configuracoes';
     }

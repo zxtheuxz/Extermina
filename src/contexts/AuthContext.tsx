@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useMemo } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { useWhyDidYouUpdate } from '../hooks/useWhyDidYouUpdate';
 
 interface UserProfile {
   user_id: string;
@@ -24,6 +25,55 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Cache global simples (sem singleton que impede re-inicialização)
+let globalProfile: UserProfile | null = null;
+
+// Singleton robusto para StrictMode
+let globalAuthState = {
+  initialized: false,
+  initPromise: null as Promise<void> | null,
+  subscription: null as any,
+  activeInstances: 0
+};
+
+// Controle de eventos Supabase duplicados
+let lastEventTime = 0;
+let lastEventData: { event: string; userId?: string } | null = null;
+const EVENT_DEBOUNCE_MS = 500; // 500ms debounce entre eventos
+
+// Função para filtrar eventos duplicados do Supabase
+function shouldProcessAuthEvent(event: string, session: any): boolean {
+  const now = Date.now();
+  const currentEventData = {
+    event,
+    userId: session?.user?.id
+  };
+
+  // Verificar debounce temporal
+  if (now - lastEventTime < EVENT_DEBOUNCE_MS) {
+    return false;
+  }
+
+  // Verificar se é evento idêntico ao anterior
+  if (lastEventData && 
+      lastEventData.event === currentEventData.event && 
+      lastEventData.userId === currentEventData.userId) {
+    return false;
+  }
+
+  // Ignorar eventos SIGNED_IN repetidos para mesmo usuário
+  if (event === 'SIGNED_IN' && lastEventData?.event === 'SIGNED_IN' && 
+      lastEventData.userId === currentEventData.userId) {
+    return false;
+  }
+
+  // Atualizar dados do último evento
+  lastEventTime = now;
+  lastEventData = currentEventData;
+  
+  return true;
+}
+
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
@@ -42,11 +92,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Cache localStorage para perfil do usuário
+  // Cache localStorage simples
   const PROFILE_CACHE_KEY = 'user_profile_cache';
-  const CACHE_DURATION = 60 * 60 * 1000; // 1 hora
+  const CACHE_DURATION = 30 * 60 * 1000; // 30 minutos
 
   const saveProfileToCache = (profile: UserProfile) => {
     try {
@@ -55,7 +104,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         timestamp: Date.now()
       };
       localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(cacheData));
-      console.log('AuthContext: Perfil salvo no cache:', profile);
+      globalProfile = profile;
     } catch (error) {
       console.warn('AuthContext: Erro ao salvar perfil no cache:', error);
     }
@@ -64,7 +113,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const getProfileFromCache = (userId: string): UserProfile | null => {
     try {
       const cached = localStorage.getItem(PROFILE_CACHE_KEY);
-      if (!cached) return null;
+      if (!cached) return globalProfile;
 
       const cacheData = JSON.parse(cached);
       const age = Date.now() - cacheData.timestamp;
@@ -72,14 +121,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Verificar se cache expirou ou é de outro usuário
       if (age > CACHE_DURATION || cacheData.profile.user_id !== userId) {
         localStorage.removeItem(PROFILE_CACHE_KEY);
+        globalProfile = null;
         return null;
       }
 
-      console.log('AuthContext: Perfil recuperado do cache:', cacheData.profile);
+      globalProfile = cacheData.profile;
       return cacheData.profile;
     } catch (error) {
       console.warn('AuthContext: Erro ao recuperar perfil do cache:', error);
       localStorage.removeItem(PROFILE_CACHE_KEY);
+      globalProfile = null;
       return null;
     }
   };
@@ -87,57 +138,51 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const clearProfileCache = () => {
     try {
       localStorage.removeItem(PROFILE_CACHE_KEY);
-      console.log('AuthContext: Cache do perfil limpo');
+      globalProfile = null;
     } catch (error) {
       console.warn('AuthContext: Erro ao limpar cache:', error);
     }
   };
 
-  // Função para buscar perfil do usuário com retry
-  const fetchUserProfile = async (userId: string, attempt: number = 1): Promise<UserProfile | null> => {
-    const maxAttempts = 3;
-    const timestamp = new Date().toISOString();
+  // Função simples para buscar perfil com timeout
+  const fetchUserProfile = async (userId: string): Promise<UserProfile | null> => {
+    // Criar timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Timeout na busca de perfil'));
+      }, 5000);
+    });
     
-    try {
-      console.log(`[${timestamp}] AuthContext: Tentativa ${attempt}/${maxAttempts} - Buscando perfil para userId: ${userId}`);
-      
-      const { data, error } = await supabase
-        .from('perfis')
-        .select('user_id, role, nome_completo')
-        .eq('user_id', userId)
-        .single();
+    // Criar busca promise
+    const fetchPromise = (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('perfis')
+          .select('user_id, role, nome_completo')
+          .eq('user_id', userId)
+          .single();
 
-      if (error) {
-        console.warn(`[${timestamp}] Erro ao buscar perfil do usuário (tentativa ${attempt}):`, error);
-        
-        // Se é um erro de rede e ainda temos tentativas, retry
-        if (attempt < maxAttempts && (error.code === 'PGRST301' || error.message?.includes('timeout'))) {
-          const delay = Math.pow(2, attempt - 1) * 1000; // Backoff exponencial: 1s, 2s, 4s
-          console.log(`[${timestamp}] Tentando novamente em ${delay}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          return fetchUserProfile(userId, attempt + 1);
+        if (error) {
+          console.warn('Erro ao buscar perfil:', error);
+          // Retorna perfil padrão se não encontrar
+          return {
+            user_id: userId,
+            role: 'usuario'
+          };
         }
-        
-        // Retorna perfil padrão se não encontrar após todas as tentativas
-        return {
-          user_id: userId,
-          role: 'usuario'
-        };
-      }
 
-      console.log(`[${timestamp}] Perfil carregado com sucesso na tentativa ${attempt}:`, data);
-      return data;
-    } catch (error) {
-      console.error(`[${timestamp}] Erro inesperado ao buscar perfil (tentativa ${attempt}):`, error);
-      
-      // Se ainda temos tentativas e é um erro de rede, retry
-      if (attempt < maxAttempts) {
-        const delay = Math.pow(2, attempt - 1) * 1000;
-        console.log(`[${timestamp}] Erro inesperado, tentando novamente em ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return fetchUserProfile(userId, attempt + 1);
+        return data;
+      } catch (error) {
+        console.error('Erro inesperado ao buscar perfil:', error);
+        throw error;
       }
-      
+    })();
+    
+    // Race entre busca e timeout
+    try {
+      return await Promise.race([fetchPromise, timeoutPromise]);
+    } catch (error) {
+      console.error('AuthContext: Falha na busca de perfil:', error);
       return {
         user_id: userId,
         role: 'usuario'
@@ -145,11 +190,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  // Função para atualizar estado do usuário com proteção anti-loop
+  // Função simples para atualizar estado
   const updateUserState = async (newSession: Session | null) => {
     try {
-      console.log('AuthContext: Atualizando estado do usuário...', !!newSession?.user);
-      
       if (newSession?.user) {
         setUser(newSession.user);
         setSession(newSession);
@@ -160,41 +203,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (cachedProfile) {
           setUserProfile(cachedProfile);
           setProfileLoading(false);
-          console.log('AuthContext: Usando perfil do cache durante carregamento:', cachedProfile);
-        }
-
-        // Buscar perfil do usuário com timeout otimizado
-        const profilePromise = fetchUserProfile(newSession.user.id);
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout ao buscar perfil após 8 segundos')), 8000)
-        );
-        
-        try {
-          const profile = await Promise.race([profilePromise, timeoutPromise]) as UserProfile | null;
-          if (profile) {
-            setUserProfile(profile);
-            saveProfileToCache(profile);
-            console.log('AuthContext: Perfil carregado do banco e salvo no cache:', profile);
-          }
-        } catch (error) {
-          console.warn('AuthContext: Erro ou timeout ao buscar perfil:', error);
-          
-          // Se tiver cache, manter o cache; senão usar fallback
-          if (!cachedProfile) {
+          setLoading(false);
+        } else {
+          // Só buscar do banco se não tem cache
+          try {
+            const profile = await fetchUserProfile(newSession.user.id);
+            if (profile) {
+              setUserProfile(profile);
+              saveProfileToCache(profile);
+            }
+          } catch (error) {
+            console.warn('Erro ao buscar perfil:', error);
+            // Usar fallback se não conseguir buscar
             const fallbackProfile = {
               user_id: newSession.user.id,
               role: 'usuario'
             };
             setUserProfile(fallbackProfile);
-            console.log('AuthContext: Usando perfil padrão (sem cache disponível):', fallbackProfile);
-          } else {
-            console.log('AuthContext: Mantendo perfil do cache devido ao timeout');
+          } finally {
+            setProfileLoading(false);
           }
-        } finally {
-          setProfileLoading(false);
         }
       } else {
-        console.log('AuthContext: Limpando estado do usuário');
         setUser(null);
         setSession(null);
         setUserProfile(null);
@@ -202,61 +232,79 @@ export function AuthProvider({ children }: AuthProviderProps) {
         clearProfileCache();
       }
       
-      // Garantir que loading seja falso após atualização
       setLoading(false);
     } catch (error) {
-      console.error('AuthContext: Erro ao atualizar estado:', error);
+      console.error('Erro ao atualizar estado:', error);
       setLoading(false);
       setProfileLoading(false);
     }
   };
 
-  // Configurar listener de autenticação (apenas um) - SEM DEPENDÊNCIAS para evitar loops
+  // Configurar listener de autenticação (singleton robusto)
   useEffect(() => {
     let isMounted = true;
-    let hasInitialized = false; // Flag local para evitar re-inicialização
+    globalAuthState.activeInstances++;
 
-    // Função para inicializar sessão
     const initializeAuth = async () => {
-      if (hasInitialized) {
-        console.log('AuthContext: Já inicializado, ignorando...');
+      // Usar singleton global
+      if (globalAuthState.initialized) {
+        // Só atualizar estado local
+        try {
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (isMounted) {
+            await updateUserState(currentSession);
+          }
+        } catch (error) {
+          console.error('Erro ao reutilizar sessão:', error);
+          if (isMounted) {
+            setLoading(false);
+          }
+        }
         return;
       }
 
-      try {
-        console.log('AuthContext: Inicializando autenticação...');
-        hasInitialized = true;
-        
-        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('AuthContext: Erro ao obter sessão:', error);
-        }
-
-        if (isMounted) {
-          await updateUserState(currentSession);
-          setLoading(false);
-          setIsInitialized(true);
-          console.log('AuthContext: Autenticação inicializada', !!currentSession);
-        }
-      } catch (error) {
-        console.error('AuthContext: Erro na inicialização:', error);
-        if (isMounted) {
-          setLoading(false);
-          setIsInitialized(true);
-        }
+      // Se há inicialização em progresso, aguardar
+      if (globalAuthState.initPromise) {
+        await globalAuthState.initPromise;
+        return;
       }
+
+      // Criar nova inicialização
+      globalAuthState.initPromise = (async () => {
+        try {
+          const { data: { session: currentSession }, error } = await supabase.auth.getSession();
+          
+          if (error) {
+            console.error('AuthContext: Erro ao obter sessão:', error);
+          }
+
+          if (isMounted) {
+            await updateUserState(currentSession);
+          }
+
+          globalAuthState.initialized = true;
+        } catch (error) {
+          console.error('AuthContext: Erro na inicialização:', error);
+          if (isMounted) {
+            setLoading(false);
+          }
+        } finally {
+          globalAuthState.initPromise = null;
+        }
+      })();
+
+      await globalAuthState.initPromise;
     };
 
-    // Configurar listener de mudanças de estado
+    // Configurar listener de mudanças de estado com filtro de duplicatas
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
-        console.log('AuthContext: Mudança de estado de auth:', event, !!newSession);
+        // Filtrar eventos duplicados e desnecessários
+        if (!shouldProcessAuthEvent(event, newSession)) {
+          return; // Ignorar evento
+        }
         
-        // Só processar mudanças após inicialização completa
-        if (isMounted && hasInitialized) {
-          // Pequeno delay para evitar condições de corrida
-          await new Promise(resolve => setTimeout(resolve, 100));
+        if (isMounted) {
           await updateUserState(newSession);
         }
       }
@@ -265,18 +313,38 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Inicializar apenas uma vez
     initializeAuth();
 
-    // Cleanup
+    // Armazenar subscription no estado global
+    globalAuthState.subscription = subscription;
+
+    // Cleanup robusto compatível com StrictMode
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
-      console.log('AuthContext: Cleanup realizado');
+      globalAuthState.activeInstances--;
+      
+      // Só limpar completamente quando não há mais instâncias ativas
+      if (globalAuthState.activeInstances <= 0) {
+        if (globalAuthState.subscription) {
+          globalAuthState.subscription.unsubscribe();
+          globalAuthState.subscription = null;
+        }
+        // Reset completo do estado global para permitir nova inicialização
+        globalAuthState.initialized = false;
+        globalAuthState.initPromise = null;
+        globalAuthState.activeInstances = 0;
+        
+        // Limpar também os dados de eventos
+        lastEventTime = 0;
+        lastEventData = null;
+      } else {
+        // Só desconectar subscription local sem afetar o estado global
+        subscription.unsubscribe();
+      }
     };
-  }, []); // REMOVIDA a dependência isInitialized para evitar loop
+  }, []); // Sem dependências para evitar loops
 
   // Função de login
   const signIn = async (email: string, password: string) => {
     try {
-      console.log('AuthContext: Iniciando login...');
       setLoading(true);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -289,9 +357,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return { user: null, error };
       }
 
-      console.log('AuthContext: Login bem-sucedido, aguardando listener...');
       // O listener onAuthStateChange irá atualizar o estado automaticamente
-      // Não definir loading=false aqui, deixar para o listener
       return { user: data.user, error: null };
     } catch (error) {
       console.error('AuthContext: Erro inesperado no login:', error);
@@ -304,7 +370,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signOut = async () => {
     try {
       setLoading(true);
-      console.log('AuthContext: Fazendo logout...');
       
       const { error } = await supabase.auth.signOut();
       if (error) {
@@ -316,8 +381,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setSession(null);
       setUserProfile(null);
       clearProfileCache();
-
-      console.log('AuthContext: Logout concluído');
     } catch (error) {
       console.error('AuthContext: Erro inesperado no logout:', error);
       // Mesmo com erro, limpar estado local
@@ -333,19 +396,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Função para refresh manual da sessão
   const refreshSession = async () => {
     try {
-      console.log('AuthContext: Fazendo refresh da sessão...');
       const { data, error } = await supabase.auth.refreshSession();
       
       if (error) {
         console.error('AuthContext: Erro no refresh da sessão:', error);
-        // Se falhar no refresh, fazer logout
         await signOut();
         return;
       }
 
       if (data.session) {
         await updateUserState(data.session);
-        console.log('AuthContext: Sessão atualizada com sucesso');
       }
     } catch (error) {
       console.error('AuthContext: Erro inesperado no refresh:', error);
@@ -355,13 +415,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Função para verificar se usuário tem determinado role
   const hasRole = (roles: string[]): boolean => {
-    if (!userProfile) {
-      console.log('AuthContext.hasRole: userProfile não disponível');
-      return false;
-    }
-    const hasAccess = roles.includes(userProfile.role);
-    console.log(`AuthContext.hasRole: Verificando role '${userProfile.role}' contra [${roles.join(', ')}] = ${hasAccess}`);
-    return hasAccess;
+    if (!userProfile) return false;
+    return roles.includes(userProfile.role);
   };
 
   // Função para obter a rota padrão baseada no role
@@ -380,7 +435,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  const value: AuthContextType = {
+  // Debug para rastrear mudanças
+  useWhyDidYouUpdate('AuthContext', {
+    user: user?.id, // Só o ID para não poluir
+    session: session?.user?.id, // Só o ID para não poluir  
+    userProfile,
+    loading,
+    profileLoading,
+    isAuthenticated: !!user
+  });
+
+  // Memoizar value para evitar re-renders desnecessários
+  const value: AuthContextType = useMemo(() => ({
     user,
     session,
     userProfile,
@@ -392,7 +458,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAuthenticated: !!user,
     hasRole,
     getDefaultRouteForRole,
-  };
+  }), [user, session, userProfile, loading, profileLoading]);
 
   return (
     <AuthContext.Provider value={value}>

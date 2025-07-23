@@ -1,4 +1,5 @@
 import { Navigate } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface RoleBasedRouteProps {
@@ -13,19 +14,55 @@ export function RoleBasedRoute({
   redirectTo = '/dashboard' 
 }: RoleBasedRouteProps) {
   const { isAuthenticated, loading, profileLoading, hasRole, userProfile } = useAuth();
+  
+  // Proteção anti-loop: timeout máximo para loading
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasTimedOut = useRef(false);
 
   // Para roles críticos (admin/preparador), identificar se é um caso especial
   const isCriticalRole = allowedRoles.some(role => ['admin', 'preparador'].includes(role));
 
+  // Configurar timeout para loading apenas uma vez na montagem
+  useEffect(() => {
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+  }, []); // Executar apenas uma vez na montagem
+
+  // Configurar timeout em useEffect próprio para evitar re-mount
+  useEffect(() => {
+    // Proteção anti-loop: timeout de 8 segundos para loading (maior que PrivateRoute devido à complexidade)
+    if ((loading || profileLoading) && !hasTimedOut.current) {
+      loadingTimeoutRef.current = setTimeout(() => {
+        hasTimedOut.current = true;
+        
+        // Para roles críticos, tentar redirecionar para área apropriada
+        if (isCriticalRole && isAuthenticated) {
+          window.location.href = userProfile?.role === 'admin' ? '/admin/dashboard' : '/preparador/dashboard';
+        } else {
+          // Fallback para área normal
+          window.location.href = '/dashboard';
+        }
+      }, 8000);
+    }
+
+    // Limpar timeout quando loading termina
+    if (!loading && !profileLoading && loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      hasTimedOut.current = false;
+    }
+
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+    };
+  }, [loading, profileLoading, isAuthenticated, userProfile, isCriticalRole]);
+
   // Aguardar tanto o carregamento da sessão quanto do perfil
-  if (loading || profileLoading) {
-    console.log("RoleBasedRoute: Aguardando carregamento", { 
-      loading, 
-      profileLoading, 
-      isCriticalRole,
-      allowedRoles 
-    });
-    
+  if ((loading || profileLoading) && !hasTimedOut.current) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{background: 'linear-gradient(135deg, #f5f7ff 0%, #e0e6ff 100%)'}}>
         <div className="text-center">
@@ -41,25 +78,18 @@ export function RoleBasedRoute({
   }
 
   if (!isAuthenticated) {
-    console.log("RoleBasedRoute: Usuário não autenticado, redirecionando para login");
     return <Navigate to="/login" />;
   }
 
   // Verificar se o perfil foi carregado completamente
   if (!userProfile) {
-    console.log("RoleBasedRoute: Perfil do usuário não carregado, redirecionando para dashboard padrão");
     return <Navigate to="/dashboard" />;
   }
 
   const userHasAccess = hasRole(allowedRoles);
   if (!userHasAccess) {
-    console.log(`RoleBasedRoute: Usuário não tem acesso. Role: ${userProfile?.role}, Allowed: [${allowedRoles.join(', ')}], redirecionando para ${redirectTo}`);
     return <Navigate to={redirectTo} />;
   }
 
-  console.log("RoleBasedRoute: Usuário autenticado e com acesso, renderizando conteúdo protegido", { 
-    role: userProfile.role, 
-    allowedRoles
-  });
   return <>{children}</>;
 }

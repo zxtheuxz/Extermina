@@ -9,6 +9,7 @@ import { AvaliacaoFisica } from './pages/AvaliacaoFisica';
 import { AvaliacaoNutricionalFeminina, AvaliacaoNutricionalMasculina } from './pages/avaliacao-nutricional';
 import { Resultados } from './pages/Resultados';
 import { Fotos } from './pages/Fotos';
+import { AnaliseCorporal } from './pages/AnaliseCorporal';
 import { Cadastro } from './pages/Cadastro';
 import { RedefinirSenha } from './pages/RedefinirSenha';
 import { Configuracoes } from './pages/Configuracoes';
@@ -22,9 +23,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ActivityLoggerProvider } from './providers/ActivityLoggerProvider';
 import './styles/global.css';
 
-// Verificar se os componentes estão sendo importados corretamente
-console.log('AvaliacaoFisica:', AvaliacaoFisica);
-console.log('ProtectedFormRoute:', ProtectedFormRoute);
+// Logs de debug removidos para evitar poluição do console
 
 function App() {
   return (
@@ -46,6 +45,7 @@ function App() {
                 <Route path="/avaliacao-nutricional/masculino" element={<ProtectedFormRoute component={AvaliacaoNutricionalMasculina} formType="nutricional" />} />
                 <Route path="/resultados" element={<PrivateRoute><Resultados /></PrivateRoute>} />
                 <Route path="/fotos" element={<PrivateRoute><Fotos /></PrivateRoute>} />
+                <Route path="/analise-corporal" element={<PrivateRoute><AnaliseCorporal /></PrivateRoute>} />
                 <Route path="/resultado-fisico" element={<PrivateRoute><ResultadoFisico /></PrivateRoute>} />
                 <Route path="/resultado-nutricional" element={<PrivateRoute><ResultadoNutricional /></PrivateRoute>} />
                 <Route path="/configuracoes" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />

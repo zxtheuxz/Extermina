@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { LogOut, Home, Settings, X, Sun, Moon, BarChart3, Image } from 'lucide-react';
+import { LogOut, Home, Settings, X, Sun, Moon, BarChart3, Image, Brain } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Header } from './Header';
@@ -172,6 +172,17 @@ export function Layout({ children }: LayoutProps) {
                 <Image size={18} className="flex-shrink-0" />
               </div>
               <span className="truncate font-medium">Fotos</span>
+            </Link>
+            
+            <Link to="/analise-corporal" className={getLinkClass('/analise-corporal')}>
+              <div className={`p-2 rounded-lg ${
+                location.pathname === '/analise-corporal' 
+                  ? 'bg-white/20' 
+                  : isDark ? 'bg-gray-700/50' : 'bg-gray-100'
+              } transition-colors group-hover:scale-110`}>
+                <Brain size={18} className="flex-shrink-0" />
+              </div>
+              <span className="truncate font-medium">Análise Corporal</span>
             </Link>
           </div>
           

@@ -34,8 +34,6 @@ export function LoginStaff() {
     setErro('');
     
     try {
-      console.log('LoginStaff: Verificando permissões por email antes da autenticação...');
-      
       // PRIMEIRO: Verificar se o email corresponde a um usuário staff
       // Usar consulta RPC customizada ou tentar buscar por auth.users primeiro
       let roleData = null;
@@ -46,8 +44,6 @@ export function LoginStaff() {
         const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
         
         if (authError) {
-          console.log('LoginStaff: Erro ao acessar admin API, tentando abordagem alternativa...');
-          
           // Abordagem alternativa: fazer login temporário para obter user_id
           const { data: tempAuth, error: tempError } = await supabase.auth.signInWithPassword({
             email,
@@ -55,7 +51,6 @@ export function LoginStaff() {
           });
 
           if (tempError) {
-            console.log('LoginStaff: Credenciais inválidas:', tempError);
             setErro('Credenciais inválidas.');
             return;
           }
@@ -70,7 +65,6 @@ export function LoginStaff() {
           if (profileError) {
             // Fazer logout da tentativa temporária
             await supabase.auth.signOut();
-            console.log('LoginStaff: Erro ao buscar perfil:', profileError);
             setErro('Usuário não encontrado no sistema.');
             return;
           }
@@ -81,7 +75,6 @@ export function LoginStaff() {
           const targetUser = authUsers.users.find(u => u.email === email);
           
           if (!targetUser) {
-            console.log('LoginStaff: Email não encontrado no sistema');
             setErro('Email não encontrado no sistema.');
             return;
           }
@@ -94,7 +87,6 @@ export function LoginStaff() {
             .single();
 
           if (profileError) {
-            console.log('LoginStaff: Erro ao buscar perfil:', profileError);
             setErro('Usuário não encontrado no sistema.');
             return;
           }
@@ -102,23 +94,19 @@ export function LoginStaff() {
           roleData = profileData;
         }
       } catch (err) {
-        console.log('LoginStaff: Erro na verificação inicial:', err);
         setErro('Erro ao verificar permissões. Tente novamente.');
         return;
       }
 
       if (!roleData) {
-        console.log('LoginStaff: Dados de role não encontrados');
         setErro('Usuário não encontrado ou não autorizado para esta área.');
         return;
       }
 
       const userRole = roleData.role;
-      console.log(`LoginStaff: Role detectado: ${userRole}`);
 
       // BLOQUEAR usuários comuns ANTES da autenticação
       if (userRole === 'cliente' || userRole === 'usuario') {
-        console.log('LoginStaff: Usuário comum tentou acessar área staff - bloqueando');
         setErro('Esta área é restrita ao staff. Use o login normal.');
         
         setTimeout(() => {
@@ -134,14 +122,12 @@ export function LoginStaff() {
 
       // PERMITIR apenas admin e preparador
       if (userRole !== 'admin' && userRole !== 'preparador') {
-        console.log(`LoginStaff: Role não autorizado: ${userRole}`);
         setErro('Role de usuário não autorizado para esta área.');
         return;
       }
 
       // SEGUNDO: Se já foi autenticado na verificação inicial, usar signIn para atualizar AuthContext
       // Se não foi autenticado ainda, fazer a autenticação agora
-      console.log('LoginStaff: Permissões verificadas, fazendo autenticação...');
       const { user, error } = await signIn(email, senha);
 
       if (error) {
@@ -151,14 +137,11 @@ export function LoginStaff() {
       }
 
       if (user) {
-        console.log(`LoginStaff: Login bem-sucedido para ${userRole}`);
-        
         // Aguardar um pouco para o AuthContext processar
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Redirecionar baseado no role
         const defaultRoute = userRole === 'admin' ? '/admin/dashboard' : '/preparador/dashboard';
-        console.log(`LoginStaff: Redirecionando para ${defaultRoute}`);
         navigate(defaultRoute);
       }
     } catch (error) {
