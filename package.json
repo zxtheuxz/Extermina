@@ -16,6 +16,7 @@
     "@mediapipe/camera_utils": "^0.3.1675466862",
     "@mediapipe/drawing_utils": "^0.3.1675466124",
     "@mediapipe/pose": "^0.5.1675469404",
+    "@mediapipe/selfie_segmentation": "^0.1.1675465747",
     "@react-three/drei": "^10.0.3",
     "@react-three/fiber": "^9.0.4",
     "@supabase/supabase-js": "^2.39.7",

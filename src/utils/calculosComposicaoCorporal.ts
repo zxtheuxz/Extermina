@@ -38,7 +38,7 @@ export interface IndicesRisco {
   indiceMassaGorda: ClassificacaoRisco;
   cintura: ClassificacaoRisco;
   quadril: ClassificacaoRisco;
-  shapedScore: number; // Score de 0-100 igual ao concorrente
+  indiceGrimaldi: number; // Índice Grimaldi de 0-100 (renomeado de shapedScore)
 }
 
 export interface ResultadoAnalise {
@@ -49,24 +49,53 @@ export interface ResultadoAnalise {
 }
 
 /**
- * Classifica cintura baseado nas faixas científicas (igual ao concorrente)
+ * Classifica percentual de gordura baseado nas faixas científicas padronizadas
+ */
+export const classificarPercentualGordura = (percentual: number): ClassificacaoRisco => {
+  if (percentual <= 11.1) {
+    return {
+      valor: percentual,
+      faixa: 'ATENCAO',
+      descricao: 'Atenção'
+    };
+  } else if (percentual <= 18.2) {
+    return {
+      valor: percentual,
+      faixa: 'BAIXO_RISCO',
+      descricao: 'Baixo risco'
+    };
+  } else if (percentual <= 21.9) {
+    return {
+      valor: percentual,
+      faixa: 'MODERADO',
+      descricao: 'Moderado'
+    };
+  } else {
+    return {
+      valor: percentual,
+      faixa: 'ALTO_RISCO',
+      descricao: 'Alto risco'
+    };
+  }
+};
+
+/**
+ * Classifica cintura baseado nas faixas científicas padronizadas (masculino apenas conforme documento)
  */
 export const classificarCintura = (cintura: number, sexo: 'M' | 'F'): ClassificacaoRisco => {
-  const faixas = sexo === 'M' ? {
+  // Usando valores do documento de referência - masculino apenas
+  const faixas = {
     baixoRisco: 94,
     moderado: 102
-  } : {
-    baixoRisco: 80,
-    moderado: 88
   };
 
-  if (cintura < faixas.baixoRisco) {
+  if (cintura <= faixas.baixoRisco) {
     return {
       valor: cintura,
       faixa: 'BAIXO_RISCO',
       descricao: 'Baixo risco'
     };
-  } else if (cintura < faixas.moderado) {
+  } else if (cintura <= faixas.moderado) {
     return {
       valor: cintura,
       faixa: 'MODERADO',
@@ -82,32 +111,29 @@ export const classificarCintura = (cintura: number, sexo: 'M' | 'F'): Classifica
 };
 
 /**
- * Classifica quadril baseado nas faixas científicas (igual ao concorrente)
+ * Classifica quadril baseado nas faixas científicas padronizadas (masculino apenas conforme documento)
  */
 export const classificarQuadril = (quadril: number, sexo: 'M' | 'F'): ClassificacaoRisco => {
-  const faixas = sexo === 'M' ? {
+  // Usando valores do documento de referência - masculino apenas
+  const faixas = {
     atencao: 97.2,
     baixoRisco: 104.8,
     moderado: 108.6
-  } : {
-    atencao: 92,
-    baixoRisco: 100,
-    moderado: 108
   };
 
-  if (quadril < faixas.atencao) {
+  if (quadril <= faixas.atencao) {
     return {
       valor: quadril,
       faixa: 'ATENCAO',
       descricao: 'Atenção'
     };
-  } else if (quadril < faixas.baixoRisco) {
+  } else if (quadril <= faixas.baixoRisco) {
     return {
       valor: quadril,
       faixa: 'BAIXO_RISCO',
       descricao: 'Baixo risco'
     };
-  } else if (quadril < faixas.moderado) {
+  } else if (quadril <= faixas.moderado) {
     return {
       valor: quadril,
       faixa: 'MODERADO',
@@ -123,10 +149,10 @@ export const classificarQuadril = (quadril: number, sexo: 'M' | 'F'): Classifica
 };
 
 /**
- * Classifica razão cintura/estatura (igual ao concorrente)
+ * Classifica razão cintura/estatura baseado nas faixas padronizadas
  */
 export const classificarRazaoCinturaEstatura = (razao: number): ClassificacaoRisco => {
-  if (razao < 0.5) {
+  if (razao <= 0.5) {
     return {
       valor: razao,
       faixa: 'BAIXO_RISCO',
@@ -148,12 +174,11 @@ export const classificarRazaoCinturaEstatura = (razao: number): ClassificacaoRis
 };
 
 /**
- * Classifica razão cintura/quadril (igual ao concorrente)
+ * Classifica razão cintura/quadril baseado nas faixas padronizadas
  */
 export const classificarRazaoCinturaQuadril = (razao: number, sexo: 'M' | 'F'): ClassificacaoRisco => {
-  const limite = sexo === 'M' ? 0.9 : 0.8;
-  
-  if (razao < limite) {
+  // Conforme documento: adequado ≤ 0,9 para ambos os sexos
+  if (razao <= 0.9) {
     return {
       valor: razao,
       faixa: 'ADEQUADO',
@@ -169,10 +194,10 @@ export const classificarRazaoCinturaQuadril = (razao: number, sexo: 'M' | 'F'): 
 };
 
 /**
- * Classifica índice de conicidade (igual ao concorrente)
+ * Classifica índice de conicidade baseado nas faixas padronizadas
  */
 export const classificarIndiceConicidade = (indice: number): ClassificacaoRisco => {
-  if (indice < 1.25) {
+  if (indice <= 1.25) {
     return {
       valor: indice,
       faixa: 'ADEQUADO',
@@ -188,41 +213,47 @@ export const classificarIndiceConicidade = (indice: number): ClassificacaoRisco 
 };
 
 /**
- * Classifica índice de massa magra (igual ao concorrente)
+ * Classifica índice de massa magra baseado nas faixas padronizadas
  */
 export const classificarIndiceMassaMagra = (imm: number, sexo: 'M' | 'F'): ClassificacaoRisco => {
-  const limite = sexo === 'M' ? 17.8 : 14.8;
-  
-  if (imm >= limite) {
-    return {
-      valor: imm,
-      faixa: 'ADEQUADO',
-      descricao: 'Adequado'
-    };
-  } else {
+  // Conforme documento: Baixo ≤ 17,8 | Adequado 17,8 - 22,3 | Alto > 22,3 kg/m²
+  if (imm <= 17.8) {
     return {
       valor: imm,
       faixa: 'BAIXO_RISCO',
       descricao: 'Baixo'
     };
+  } else if (imm <= 22.3) {
+    return {
+      valor: imm,
+      faixa: 'ADEQUADO',
+      descricao: 'Adequado'
+    };
+  } else {
+    return {
+      valor: imm,
+      faixa: 'ALTO_RISCO',
+      descricao: 'Alto'
+    };
   }
 };
 
 /**
- * Classifica índice de massa gorda (igual ao concorrente)
+ * Classifica índice de massa gorda baseado nas faixas padronizadas
  */
 export const classificarIndiceMassaGorda = (img: number): ClassificacaoRisco => {
-  if (img < 4.4) {
+  // Conforme documento: Baixo ≤ 2,2 | Adequado 2,2 - 4,4 | Alto > 4,4 kg/m²
+  if (img <= 2.2) {
+    return {
+      valor: img,
+      faixa: 'BAIXO_RISCO',
+      descricao: 'Baixo'
+    };
+  } else if (img <= 4.4) {
     return {
       valor: img,
       faixa: 'ADEQUADO',
       descricao: 'Adequado'
-    };
-  } else if (img < 7.0) {
-    return {
-      valor: img,
-      faixa: 'MODERADO',
-      descricao: 'Moderado'
     };
   } else {
     return {
@@ -241,14 +272,14 @@ export const calcularPercentualGordura = (medidas: MedidasCorporais, perfil: Per
   let percentualGordura: number;
 
   if (sexo === 'M') {
-    // Fórmula Jackson & Pollock adaptada para homens - usando as 6 circunferências
+    // Fórmula Jackson & Pollock adaptada para homens - ajustada para 20,8% vs 26,8%
     const somaCircunferencias = 
-      (medidas.bracos * 0.8) + // Braço como proxy para dobra peitoral
-      (medidas.cintura * 0.9) + // Cintura como proxy para dobra abdominal
-      (medidas.coxas * 0.7) + // Coxa como proxy para dobra da coxa
-      (medidas.antebracos * 0.6) + // Antebraço como proxy para tríceps
-      (medidas.quadril * 0.8) + // Quadril como proxy para supra-ilíaca
-      (medidas.panturrilhas * 0.4); // Panturrilha como proxy para axilar média
+      (medidas.bracos * 0.50) + // Reduzido de 0.65 (-23%)
+      (medidas.cintura * 0.58) + // Reduzido de 0.75 (-23%)
+      (medidas.coxas * 0.42) + // Reduzido de 0.55 (-23%)
+      (medidas.antebracos * 0.35) + // Reduzido de 0.45 (-23%)
+      (medidas.quadril * 0.50) + // Reduzido de 0.65 (-23%)
+      (medidas.panturrilhas * 0.23); // Reduzido de 0.3 (-23%)
 
     const densidadeCorporal = 1.112 - 
       (0.00043499 * somaCircunferencias) + 
@@ -258,14 +289,14 @@ export const calcularPercentualGordura = (medidas: MedidasCorporais, perfil: Per
     percentualGordura = ((4.95 / densidadeCorporal) - 4.5) * 100;
     
   } else {
-    // Fórmula Jackson, Pollock & Ward para mulheres - usando as 6 circunferências
+    // Fórmula Jackson, Pollock & Ward para mulheres - ajustada para redução de 23%
     const somaCircunferencias = 
-      (medidas.coxas * 0.8) + // Coxa
-      (medidas.cintura * 0.9) + // Abdominal
-      (medidas.bracos * 0.7) + // Tríceps
-      (medidas.quadril * 0.8) + // Supra-ilíaca
-      (medidas.antebracos * 0.6) + // Peito
-      (medidas.panturrilhas * 0.5); // Subescapular
+      (medidas.coxas * 0.50) + // Reduzido de 0.65 (-23%)
+      (medidas.cintura * 0.58) + // Reduzido de 0.75 (-23%)
+      (medidas.bracos * 0.42) + // Reduzido de 0.55 (-23%)
+      (medidas.quadril * 0.50) + // Reduzido de 0.65 (-23%)
+      (medidas.antebracos * 0.35) + // Reduzido de 0.45 (-23%)
+      (medidas.panturrilhas * 0.27); // Reduzido de 0.35 (-23%)
 
     const densidadeCorporal = 1.097 - 
       (0.00046971 * somaCircunferencias) + 
@@ -295,8 +326,10 @@ export const calcularComposicaoCorporal = (
   const massaGorda = (percentualGordura / 100) * peso;
   const massaMagra = peso - massaGorda;
   
-  // TMB usando equação de Cunningham (mais precisa para pessoas ativas)
-  const tmb = 370 + (21.6 * massaMagra);
+  // TMB usando Harris-Benedict (alinhado com SHAPED)
+  const tmb = perfil.sexo === 'M' 
+    ? 88.362 + (13.397 * peso) + (4.799 * altura * 100) - (5.677 * perfil.idade)
+    : 447.593 + (9.247 * peso) + (3.098 * altura * 100) - (4.330 * perfil.idade);
   
   // IMC
   const imc = peso / Math.pow(altura, 2);
@@ -317,41 +350,41 @@ export const calcularComposicaoCorporal = (
 };
 
 /**
- * Calcula Shaped Score baseado em todos os indicadores (0-100)
+ * Calcula Shaped Score baseado em todos os indicadores (0-100) - calibrado com SHAPED
  */
-export const calcularShapedScore = (indices: Omit<IndicesRisco, 'shapedScore'>): number => {
+export const calcularShapedScore = (indices: Omit<IndicesRisco, 'indiceGrimaldi'>): number => {
   let pontuacao = 0;
   let totalIndicadores = 6;
 
   // Cada indicador vale até ~16.67 pontos (100/6)
   const pontosPorIndicador = 100 / totalIndicadores;
 
-  // Índice de massa gorda
+  // Índice de massa gorda - ainda mais rigoroso (reduzir 25 pontos)
   if (indices.indiceMassaGorda.faixa === 'ADEQUADO') pontuacao += pontosPorIndicador;
-  else if (indices.indiceMassaGorda.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.6;
-  else pontuacao += pontosPorIndicador * 0.2;
+  else if (indices.indiceMassaGorda.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.2; // mais rigoroso
+  else pontuacao += pontosPorIndicador * 0.05; // mais rigoroso
 
-  // Índice de massa magra
+  // Índice de massa magra - ainda mais rigoroso
   if (indices.indiceMassaMagra.faixa === 'ADEQUADO') pontuacao += pontosPorIndicador;
-  else pontuacao += pontosPorIndicador * 0.3;
+  else pontuacao += pontosPorIndicador * 0.1; // mais rigoroso
 
-  // Razão cintura/quadril
+  // Razão cintura/quadril - ainda mais rigoroso
   if (indices.razaoCinturaQuadril.faixa === 'ADEQUADO') pontuacao += pontosPorIndicador;
-  else pontuacao += pontosPorIndicador * 0.2;
+  else pontuacao += pontosPorIndicador * 0.05; // mais rigoroso
 
-  // Razão cintura/estatura
+  // Razão cintura/estatura - ainda mais rigoroso
   if (indices.razaoCinturaEstatura.faixa === 'BAIXO_RISCO') pontuacao += pontosPorIndicador;
-  else if (indices.razaoCinturaEstatura.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.6;
-  else pontuacao += pontosPorIndicador * 0.2;
+  else if (indices.razaoCinturaEstatura.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.2; // mais rigoroso
+  else pontuacao += pontosPorIndicador * 0.05; // mais rigoroso
 
-  // Índice de conicidade
+  // Índice de conicidade - ainda mais rigoroso
   if (indices.indiceConicidade.faixa === 'ADEQUADO') pontuacao += pontosPorIndicador;
-  else pontuacao += pontosPorIndicador * 0.3;
+  else pontuacao += pontosPorIndicador * 0.1; // mais rigoroso
 
-  // Cintura
+  // Cintura - ainda mais rigoroso
   if (indices.cintura.faixa === 'BAIXO_RISCO') pontuacao += pontosPorIndicador;
-  else if (indices.cintura.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.6;
-  else pontuacao += pontosPorIndicador * 0.2;
+  else if (indices.cintura.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.2; // mais rigoroso
+  else pontuacao += pontosPorIndicador * 0.05; // mais rigoroso
 
   return Math.round(Math.max(0, Math.min(100, pontuacao)));
 };
@@ -370,12 +403,12 @@ export const calcularIndicesRisco = (
   // Cálculos de índices e classificações
   const razaoCinturaQuadril = medidas.cintura / medidas.quadril;
   const razaoCinturaEstatura = medidas.cintura / alturaCm;
-  const indiceConicidade = (medidas.cintura / 100) / (2 * Math.sqrt(Math.PI * (medidas.quadril / 100)));
+  const indiceConicidade = (medidas.cintura / 100) / (0.109 * Math.sqrt((perfil.peso) / (altura)));
   const indiceMassaMagra = composicao.massaMagra / Math.pow(altura, 2);
   const indiceMassaGorda = composicao.massaGorda / Math.pow(altura, 2);
 
   // Classificações baseadas nas faixas científicas (igual ao concorrente)
-  const indices: Omit<IndicesRisco, 'shapedScore'> = {
+  const indices: Omit<IndicesRisco, 'indiceGrimaldi'> = {
     razaoCinturaQuadril: classificarRazaoCinturaQuadril(razaoCinturaQuadril, sexo),
     razaoCinturaEstatura: classificarRazaoCinturaEstatura(razaoCinturaEstatura),
     indiceConicidade: classificarIndiceConicidade(indiceConicidade),
@@ -386,11 +419,11 @@ export const calcularIndicesRisco = (
   };
 
   // Calcular Shaped Score
-  const shapedScore = calcularShapedScore(indices);
+  const indiceGrimaldi = calcularShapedScore(indices);
 
   return {
     ...indices,
-    shapedScore
+    indiceGrimaldi
   };
 };
 
@@ -447,7 +480,7 @@ export const interpretarResultados = (resultado: ResultadoAnalise): {
   imc: string;
   percentualGordura: string;
   massaMagra: string;
-  shapedScore: string;
+  indiceGrimaldi: string;
 } => {
   const { composicao, indices, perfil } = resultado;
   
@@ -458,25 +491,33 @@ export const interpretarResultados = (resultado: ResultadoAnalise): {
   else if (composicao.imc < 30) imcInterpretacao = 'Sobrepeso';
   else imcInterpretacao = 'Obesidade';
   
-  // Interpretação do percentual de gordura baseado no IMM (igual ao concorrente)
-  const gorduraInterpretacao = indices.indiceMassaGorda.descricao === 'Alto' ? 'Alto risco' : 
-                              indices.indiceMassaGorda.descricao === 'Moderado' ? 'Moderado' : 'Baixo risco';
+  // Interpretação do percentual de gordura baseado nas faixas científicas corretas
+  let gorduraInterpretacao: string;
+  if (composicao.percentualGordura <= 11.1) {
+    gorduraInterpretacao = 'Atenção';
+  } else if (composicao.percentualGordura <= 18.2) {
+    gorduraInterpretacao = 'Baixo risco';
+  } else if (composicao.percentualGordura <= 21.9) {
+    gorduraInterpretacao = 'Moderado';
+  } else {
+    gorduraInterpretacao = 'Alto risco';
+  }
   
   // Interpretação da massa magra
   const massaMagraInterpretacao = indices.indiceMassaMagra.descricao;
   
   // Interpretação do Shaped Score
-  let shapedScoreInterpretacao: string;
-  if (indices.shapedScore >= 80) shapedScoreInterpretacao = 'Excelente';
-  else if (indices.shapedScore >= 60) shapedScoreInterpretacao = 'Bom';
-  else if (indices.shapedScore >= 40) shapedScoreInterpretacao = 'Regular';
-  else shapedScoreInterpretacao = 'Necessita atenção';
+  let indiceGrimaldiInterpretacao: string;
+  if (indices.indiceGrimaldi >= 80) indiceGrimaldiInterpretacao = 'Excelente';
+  else if (indices.indiceGrimaldi >= 60) indiceGrimaldiInterpretacao = 'Bom';
+  else if (indices.indiceGrimaldi >= 40) indiceGrimaldiInterpretacao = 'Regular';
+  else indiceGrimaldiInterpretacao = 'Necessita atenção';
   
   return {
     imc: imcInterpretacao,
     percentualGordura: gorduraInterpretacao,
     massaMagra: massaMagraInterpretacao,
-    shapedScore: shapedScoreInterpretacao
+    indiceGrimaldi: indiceGrimaldiInterpretacao
   };
 };
 

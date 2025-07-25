@@ -1,18 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAnaliseCorpData } from '../../hooks/useAnaliseCorpData';
 import AnaliseCorpoMediaPipe from './AnaliseCorpoMediaPipe';
 import ResultadosAnalise from './ResultadosAnalise';
+import LoadingAnalise from './LoadingAnalise';
 import { analisarComposicaoCorporal, ResultadoAnalise } from '../../utils/calculosComposicaoCorporal';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { Camera, AlertTriangle, Loader2 } from 'lucide-react';
 
 const MedidasCorporais: React.FC = () => {
   const { user } = useAuth();
+  const { theme } = useTheme();
+  const isDarkMode = theme === 'dark';
   const { dadosCorporais, fotos, loading, error, hasMedidasExistentes, refetch } = useAnaliseCorpData();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisStep, setAnalysisStep] = useState<'calculating' | 'finalizing'>('calculating');
   const [resultadoAnalise, setResultadoAnalise] = useState<ResultadoAnalise | null>(null);
   const [errorAnalise, setErrorAnalise] = useState<string | null>(null);
+  
+  // Estado unificado para controlar quando a página está 100% pronta
+  const [pageReady, setPageReady] = useState(false);
+  const [loadingStep, setLoadingStep] = useState('profile');
+
+  // Controlar loading unificado - AGUARDA TUDO ESTAR PRONTO
+  useEffect(() => {
+    const checkPageReady = () => {
+      // SEMPRE mostrar loading se:
+      // 1. Ainda está carregando dados básicos
+      // 2. Está analisando nova medida
+      // 3. Dados não estão completamente definidos
+      if (loading || isAnalyzing) {
+        setPageReady(false);
+        return;
+      }
+
+      // Aguardar mais um pouco para garantir que tudo carregou
+      setTimeout(() => {
+        setPageReady(true);
+      }, 1000);
+    };
+
+    checkPageReady();
+  }, [loading, isAnalyzing]);
 
   const salvarResultadosNoSupabase = async (resultado: ResultadoAnalise) => {
     if (!user?.id) {
@@ -43,7 +73,7 @@ const MedidasCorporais: React.FC = () => {
         razao_cintura_quadril: resultado.indices.razaoCinturaQuadril.valor,
         razao_cintura_estatura: resultado.indices.razaoCinturaEstatura.valor,
         indice_conicidade: resultado.indices.indiceConicidade.valor,
-        shaped_score: resultado.indices.shapedScore,
+        shaped_score: resultado.indices.indiceGrimaldi, // Usando indiceGrimaldi
         
         // Metadados
         altura_usada: resultado.perfil.altura,
@@ -65,11 +95,15 @@ const MedidasCorporais: React.FC = () => {
     }
 
     setIsAnalyzing(true);
+    setAnalysisStep('calculating');
     setErrorAnalise(null);
 
     try {
       // Realizar análise completa
       const resultado = analisarComposicaoCorporal(medidas, dadosCorporais);
+      
+      // Mudança para etapa de finalização
+      setAnalysisStep('finalizing');
       
       // Salvar no Supabase
       await salvarResultadosNoSupabase(resultado);
@@ -93,19 +127,13 @@ const MedidasCorporais: React.FC = () => {
     setIsAnalyzing(false);
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="flex items-center space-x-3">
-          <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
-          <span className="text-gray-600 dark:text-gray-400">
-            Carregando dados para análise...
-          </span>
-        </div>
-      </div>
-    );
+  // LOADING UNIFICADO: Mostrar loading até tudo estar pronto
+  if (!pageReady) {
+    const currentStep = isAnalyzing ? analysisStep : 'loading_results';
+    return <LoadingAnalise step={currentStep as any} isDarkMode={isDarkMode} />;
   }
 
+  // ERRO: Se tem erro, mostrar
   if (error) {
     return (
       <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
@@ -124,9 +152,19 @@ const MedidasCorporais: React.FC = () => {
     );
   }
 
-  // Verificar se tem as fotos necessárias
-  const fotosNecessarias = fotos?.foto_lateral_direita_url && fotos?.foto_abertura_url;
+  // PRIORIDADE 1: Se tem análise atual, mostrar
+  if (resultadoAnalise) {
+    return <ResultadosAnalise resultado={resultadoAnalise} />;
+  }
 
+  // PRIORIDADE 2: Se tem análise salva, mostrar
+  if (hasMedidasExistentes) {
+    return <ResultadosAnalise />;
+  }
+
+  // PRIORIDADE 3: Verificar se pode fazer nova análise
+  const fotosNecessarias = fotos?.foto_lateral_direita_url && fotos?.foto_abertura_url;
+  
   if (!fotosNecessarias) {
     return (
       <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
@@ -150,16 +188,6 @@ const MedidasCorporais: React.FC = () => {
         </div>
       </div>
     );
-  }
-
-  // Se já tem análise salva e não está fazendo nova análise, mostrar resultados
-  if (hasMedidasExistentes && !isAnalyzing && !resultadoAnalise) {
-    return <ResultadosAnalise />;
-  }
-
-  // Se tem resultado da análise atual, mostrar
-  if (resultadoAnalise) {
-    return <ResultadosAnalise resultado={resultadoAnalise} />;
   }
 
   // Interface principal de análise

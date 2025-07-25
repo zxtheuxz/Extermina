@@ -19,7 +19,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storage: window.localStorage,
     storageKey: 'supabase.auth.token',
     
-    // Debug para identificar eventos
-    debug: process.env.NODE_ENV === 'development'
+    // Debug desabilitado para evitar poluição do console
+    debug: false
   }
 });
