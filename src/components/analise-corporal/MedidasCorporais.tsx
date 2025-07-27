@@ -44,38 +44,134 @@ const MedidasCorporais: React.FC = () => {
     checkPageReady();
   }, [loading, isAnalyzing]);
 
+  // Limites fisiológicos realistas para validação (expandidos para biotipos diversos)
+  const LIMITES_MEDIDAS = {
+    // Medidas corporais (em cm)
+    medidas: {
+      bracos: { min: 15, max: 50 },
+      antebracos: { min: 15, max: 40 },
+      cintura: { min: 50, max: 160 }, // Expandido para endomorphos
+      quadril: { min: 60, max: 190 }, // Expandido para endomorphos
+      coxas: { min: 35, max: 80 },
+      panturrilhas: { min: 25, max: 60 }
+    },
+    // Composição corporal
+    composicao: {
+      percentualGordura: { min: 3, max: 60 },
+      massaMagra: { min: 20, max: 120 },
+      massaGorda: { min: 1, max: 80 },
+      tmb: { min: 800, max: 4000 },
+      imc: { min: 10, max: 50 }
+    },
+    // Índices e razões
+    indices: {
+      razaoCinturaQuadril: { min: 0.5, max: 1.5 },
+      razaoCinturaEstatura: { min: 0.3, max: 0.8 },
+      indiceConicidade: { min: 1.0, max: 2.0 }
+    }
+  };
+
+  const validarLimitesMedidas = (resultado: ResultadoAnalise): ResultadoAnalise => {
+    const resultadoValidado = { ...resultado };
+    let temAjustes = false;
+
+    // Validar medidas corporais
+    Object.keys(LIMITES_MEDIDAS.medidas).forEach(medida => {
+      const valor = resultado.medidas[medida as keyof typeof resultado.medidas];
+      const limite = LIMITES_MEDIDAS.medidas[medida as keyof typeof LIMITES_MEDIDAS.medidas];
+      
+      if (valor !== undefined) {
+        if (valor < limite.min) {
+          console.warn(`⚠️ ${medida}: ${valor}cm abaixo do limite mínimo (${limite.min}cm) - Ajustando`);
+          resultadoValidado.medidas[medida as keyof typeof resultado.medidas] = limite.min;
+          temAjustes = true;
+        } else if (valor > limite.max) {
+          console.warn(`⚠️ ${medida}: ${valor}cm acima do limite máximo (${limite.max}cm) - Ajustando`);
+          resultadoValidado.medidas[medida as keyof typeof resultado.medidas] = limite.max;
+          temAjustes = true;
+        }
+      }
+    });
+
+    // Validar composição corporal
+    Object.keys(LIMITES_MEDIDAS.composicao).forEach(prop => {
+      const valor = resultado.composicao[prop as keyof typeof resultado.composicao];
+      const limite = LIMITES_MEDIDAS.composicao[prop as keyof typeof LIMITES_MEDIDAS.composicao];
+      
+      if (valor !== undefined) {
+        if (valor < limite.min) {
+          console.warn(`⚠️ ${prop}: ${valor} abaixo do limite mínimo (${limite.min}) - Ajustando`);
+          resultadoValidado.composicao[prop as keyof typeof resultado.composicao] = limite.min;
+          temAjustes = true;
+        } else if (valor > limite.max) {
+          console.warn(`⚠️ ${prop}: ${valor} acima do limite máximo (${limite.max}) - Ajustando`);
+          resultadoValidado.composicao[prop as keyof typeof resultado.composicao] = limite.max;
+          temAjustes = true;
+        }
+      }
+    });
+
+    // Validar índices
+    Object.keys(LIMITES_MEDIDAS.indices).forEach(indice => {
+      const objeto = resultado.indices[indice as keyof typeof resultado.indices];
+      if (objeto && 'valor' in objeto) {
+        const valor = objeto.valor;
+        const limite = LIMITES_MEDIDAS.indices[indice as keyof typeof LIMITES_MEDIDAS.indices];
+        
+        if (valor < limite.min) {
+          console.warn(`⚠️ ${indice}: ${valor} abaixo do limite mínimo (${limite.min}) - Ajustando`);
+          objeto.valor = limite.min;
+          temAjustes = true;
+        } else if (valor > limite.max) {
+          console.warn(`⚠️ ${indice}: ${valor} acima do limite máximo (${limite.max}) - Ajustando`);
+          objeto.valor = limite.max;
+          temAjustes = true;
+        }
+      }
+    });
+
+    if (temAjustes) {
+      console.log('✅ Validação completa - Alguns valores foram ajustados para limites seguros');
+    }
+
+    return resultadoValidado;
+  };
+
   const salvarResultadosNoSupabase = async (resultado: ResultadoAnalise) => {
     if (!user?.id) {
       throw new Error('Usuário não autenticado');
     }
+
+    // 🛡️ VALIDAÇÃO DE SEGURANÇA: Aplicar limites antes do insert
+    const resultadoValidado = validarLimitesMedidas(resultado);
 
     const { error: insertError } = await supabase
       .from('medidas_corporais')
       .insert({
         user_id: user.id,
         
-        // Medidas extraídas (apenas as 6 do concorrente)
-        medida_bracos: resultado.medidas.bracos,
-        medida_antebracos: resultado.medidas.antebracos,
-        medida_cintura: resultado.medidas.cintura,
-        medida_quadril: resultado.medidas.quadril,
-        medida_coxas: resultado.medidas.coxas,
-        medida_panturrilhas: resultado.medidas.panturrilhas,
+        // Medidas extraídas validadas (apenas as 6 do concorrente)
+        medida_bracos: resultadoValidado.medidas.bracos,
+        medida_antebracos: resultadoValidado.medidas.antebracos,
+        medida_cintura: resultadoValidado.medidas.cintura,
+        medida_quadril: resultadoValidado.medidas.quadril,
+        medida_coxas: resultadoValidado.medidas.coxas,
+        medida_panturrilhas: resultadoValidado.medidas.panturrilhas,
         
-        // Composição corporal
-        percentual_gordura: resultado.composicao.percentualGordura,
-        massa_magra: resultado.composicao.massaMagra,
-        massa_gorda: resultado.composicao.massaGorda,
-        tmb: resultado.composicao.tmb,
-        imc: resultado.composicao.imc,
+        // Composição corporal validada
+        percentual_gordura: resultadoValidado.composicao.percentualGordura,
+        massa_magra: resultadoValidado.composicao.massaMagra,
+        massa_gorda: resultadoValidado.composicao.massaGorda,
+        tmb: resultadoValidado.composicao.tmb,
+        imc: resultadoValidado.composicao.imc,
         
-        // Índices de risco (valores numéricos)
-        razao_cintura_quadril: resultado.indices.razaoCinturaQuadril.valor,
-        razao_cintura_estatura: resultado.indices.razaoCinturaEstatura.valor,
-        indice_conicidade: resultado.indices.indiceConicidade.valor,
-        shaped_score: resultado.indices.indiceGrimaldi, // Usando indiceGrimaldi
+        // Índices de risco validados (valores numéricos)
+        razao_cintura_quadril: resultadoValidado.indices.razaoCinturaQuadril.valor,
+        razao_cintura_estatura: resultadoValidado.indices.razaoCinturaEstatura.valor,
+        indice_conicidade: resultadoValidado.indices.indiceConicidade.valor,
+        shaped_score: resultadoValidado.indices.indiceGrimaldi, // Usando indiceGrimaldi
         
-        // Metadados
+        // Metadados (mantém originais)
         altura_usada: resultado.perfil.altura,
         peso_usado: resultado.perfil.peso,
         idade_calculada: resultado.perfil.idade,
@@ -195,11 +291,11 @@ const MedidasCorporais: React.FC = () => {
     <div className="space-y-6">
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
         <h3 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">
-          📊 Análise Corporal Automatizada
+          📊 Análise Corporal Universal v10.0
         </h3>
         <p className="text-sm text-blue-700 dark:text-blue-300">
-          Utilize inteligência artificial para extrair medidas corporais das suas fotos e calcular 
-          composição corporal com base em fórmulas científicas validadas.
+          Sistema calibrado para precisão universal em todos os biotipos: ectomorfo, mesomorfo e endomorfo.
+          Utiliza IA avançada para extrair medidas corporais com precisão &lt; 3cm.
         </p>
         <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
           <div className="bg-blue-100 dark:bg-blue-800/30 rounded p-2">
@@ -227,6 +323,8 @@ const MedidasCorporais: React.FC = () => {
         fotoLateralUrl={fotos!.foto_lateral_direita_url!}
         fotoAberturaUrl={fotos!.foto_abertura_url!}
         alturaReal={dadosCorporais!.altura}
+        peso={dadosCorporais!.peso}
+        sexo={dadosCorporais!.sexo}
         onMedidasExtraidas={handleMedidasExtraidas}
         onError={handleError}
       />

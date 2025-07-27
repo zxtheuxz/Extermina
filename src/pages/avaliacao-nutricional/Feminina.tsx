@@ -5,6 +5,8 @@ import { Scale, AlertCircle, CheckCircle, Loader2, ClipboardCheck, ArrowLeft, He
 import { Layout } from '../../components/Layout';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getThemeClass } from '../../styles/theme';
+import { ConsentModal } from '../../components/ConsentModal';
+import { TermsService } from '../../lib/termsService';
 
 // Design energético e motivacional com cores vibrantes
 const themeStyles = {
@@ -138,6 +140,12 @@ export function AvaliacaoNutricionalFeminina() {
   const [showConfirmationMessage, setShowConfirmationMessage] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   
+  // Estados para o modal de consentimento
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [consentRejected, setConsentRejected] = useState(false);
+  const [checkingConsent, setCheckingConsent] = useState(true);
+  
   const themeStyle = isDarkMode ? themeStyles.dark : themeStyles.light;
   
   // Usando o getThemeClass para obter as classes do tema
@@ -249,6 +257,39 @@ export function AvaliacaoNutricionalFeminina() {
   });
 
   // Aplica estilos de fundo e animações
+  // UseEffect para verificar consentimento
+  useEffect(() => {
+    const checkConsent = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          navigate('/login');
+          return;
+        }
+
+        const consent = await TermsService.hasUserConsented(user.id, 'AVALIACAO_FISICA_NUTRICIONAL');
+        
+        if (consent === null) {
+          // Usuário nunca deu consentimento, mostrar modal
+          setShowConsentModal(true);
+        } else if (consent === false) {
+          // Usuário rejeitou o termo
+          setConsentRejected(true);
+        } else {
+          // Usuário aceitou o termo
+          setConsentChecked(true);
+        }
+      } catch (error) {
+        console.error('Erro ao verificar consentimento:', error);
+        setErro('Erro ao carregar página. Tente novamente.');
+      } finally {
+        setCheckingConsent(false);
+      }
+    };
+
+    checkConsent();
+  }, [navigate]);
+
   useEffect(() => {
     // Adicionar CSS personalizado para animação dos elementos nutricionais
     const style = document.createElement('style');
@@ -581,6 +622,58 @@ export function AvaliacaoNutricionalFeminina() {
     }
   };
 
+  // Funções para lidar com o consentimento
+  const handleConsentAccept = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setErro('Usuário não autenticado');
+        return;
+      }
+
+      const success = await TermsService.recordConsent(user.id, 'AVALIACAO_FISICA_NUTRICIONAL', true);
+      if (success) {
+        setConsentChecked(true);
+        setShowConsentModal(false);
+      } else {
+        setErro('Erro ao registrar consentimento. Tente novamente.');
+      }
+    } catch (error) {
+      console.error('Erro ao aceitar consentimento:', error);
+      setErro('Erro ao registrar consentimento. Tente novamente.');
+    }
+  };
+
+  const handleConsentReject = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setErro('Usuário não autenticado');
+        return;
+      }
+
+      const success = await TermsService.recordConsent(user.id, 'AVALIACAO_FISICA_NUTRICIONAL', false);
+      if (success) {
+        setConsentRejected(true);
+        setShowConsentModal(false);
+        // Redirecionar para o dashboard após rejeitar
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 3000);
+      } else {
+        setErro('Erro ao registrar consentimento. Tente novamente.');
+      }
+    } catch (error) {
+      console.error('Erro ao rejeitar consentimento:', error);
+      setErro('Erro ao registrar consentimento. Tente novamente.');
+    }
+  };
+
+  const handleConsentClose = () => {
+    // Fechar modal sem consentimento redireciona para dashboard
+    navigate('/dashboard');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -693,6 +786,47 @@ export function AvaliacaoNutricionalFeminina() {
           </div>
         </div>
 
+        {/* Loading de verificação de consentimento */}
+        {checkingConsent && (
+          <div className="relative z-10 flex items-center justify-center min-h-screen">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+              <p className={`${themeClasses.textSecondary}`}>Verificando permissões...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Tela de consentimento rejeitado */}
+        {consentRejected && (
+          <div className="relative z-10 flex items-center justify-center min-h-screen px-4">
+            <div className={`text-center max-w-md p-8 rounded-2xl ${themeClasses.card}`}>
+              <div className={`w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center ${
+                isDarkMode ? 'bg-red-900/30' : 'bg-red-100'
+              }`}>
+                <AlertCircle className={`h-8 w-8 ${isDarkMode ? 'text-red-400' : 'text-red-500'}`} />
+              </div>
+              <h3 className={`text-xl font-bold mb-4 ${themeClasses.text}`}>
+                Acesso Negado
+              </h3>
+              <p className={`${themeClasses.textSecondary} mb-6`}>
+                Você optou por não aceitar os termos de consentimento. Para preencher a avaliação nutricional, 
+                é necessário aceitar os termos.
+              </p>
+              <p className={`text-sm ${themeClasses.textSecondary} mb-6`}>
+                Redirecionando para o dashboard em alguns segundos...
+              </p>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className={`w-full px-6 py-3 rounded-xl font-semibold ${themeClasses.button}`}
+              >
+                Voltar ao Dashboard
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Conteúdo principal - apenas se consentimento foi dado */}
+        {consentChecked && (
         <div className="relative z-10 max-w-7xl mx-auto px-4 py-8">
           {/* Botão Voltar para Dashboard */}
           <button
@@ -2537,44 +2671,54 @@ Bebidas: 2L de água, 3 cafés"
             </>
           )}
         </div>
-      </div>
+        )}
 
-      {/* Modal de confirmação modernizado - igual ao masculino */}
-      {showConfirmationMessage && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
-          <div className={`${isDarkMode ? 'bg-gray-800/90' : 'bg-white/90'} backdrop-blur-md rounded-2xl p-8 max-w-md w-full mx-4 border ${isDarkMode ? 'border-orange-500/30' : 'border-orange-200'} shadow-2xl animate-scaleIn`}>
-            <div className="text-center mb-6">
-              <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-full p-4 w-16 h-16 mx-auto mb-4">
-                <CheckCircle className="h-8 w-8 text-white" />
+        {/* Modal de confirmação modernizado - igual ao masculino */}
+        {showConfirmationMessage && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
+            <div className={`${isDarkMode ? 'bg-gray-800/90' : 'bg-white/90'} backdrop-blur-md rounded-2xl p-8 max-w-md w-full mx-4 border ${isDarkMode ? 'border-orange-500/30' : 'border-orange-200'} shadow-2xl animate-scaleIn`}>
+              <div className="text-center mb-6">
+                <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-full p-4 w-16 h-16 mx-auto mb-4">
+                  <CheckCircle className="h-8 w-8 text-white" />
+                </div>
+                <h3 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'} mb-2`}>
+                  Confirmar Envio
+                </h3>
+                <p className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} leading-relaxed`}>
+                  Tem certeza que deseja enviar o formulário? Verifique se todas as informações estão corretas.
+                </p>
               </div>
-              <h3 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'} mb-2`}>
-                Confirmar Envio
-              </h3>
-              <p className={`${isDarkMode ? 'text-gray-300' : 'text-gray-600'} leading-relaxed`}>
-                Tem certeza que deseja enviar o formulário? Verifique se todas as informações estão corretas.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowConfirmationMessage(false)}
-                className={`flex-1 px-6 py-3 rounded-xl transition-all duration-300 hover:scale-105 ${
-                  isDarkMode 
-                    ? 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50 border border-gray-600' 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
-                }`}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="flex-1 px-6 py-3 rounded-xl transition-all duration-300 hover:scale-105 bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg hover:shadow-xl"
-              >
-                Confirmar
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowConfirmationMessage(false)}
+                  className={`flex-1 px-6 py-3 rounded-xl transition-all duration-300 hover:scale-105 ${
+                    isDarkMode 
+                      ? 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50 border border-gray-600' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                  }`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  className="flex-1 px-6 py-3 rounded-xl transition-all duration-300 hover:scale-105 bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg hover:shadow-xl"
+                >
+                  Confirmar
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Modal de Consentimento */}
+        <ConsentModal
+          isOpen={showConsentModal}
+          termType="AVALIACAO_FISICA_NUTRICIONAL"
+          onAccept={handleConsentAccept}
+          onReject={handleConsentReject}
+          onClose={handleConsentClose}
+        />
+      </div>
     </Layout>
   );
 }

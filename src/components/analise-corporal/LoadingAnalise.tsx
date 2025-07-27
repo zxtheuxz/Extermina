@@ -162,7 +162,7 @@ const LoadingAnalise: React.FC<LoadingAnaliseProps> = ({
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         @keyframes loading-progress {
           0% { width: 30%; }
           50% { width: 70%; }

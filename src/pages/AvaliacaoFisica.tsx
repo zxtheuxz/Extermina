@@ -5,6 +5,8 @@ import { ClipboardCheck, AlertCircle, Upload, ArrowLeft, CheckCircle, Activity, 
 import { useTheme } from '../contexts/ThemeContext';
 import { getThemeClass } from '../styles/theme';
 import { Layout } from '../components/Layout';
+import { ConsentModal } from '../components/ConsentModal';
+import { TermsService } from '../lib/termsService';
 
 export function AvaliacaoFisica() {
   console.log('Componente AvaliacaoFisica renderizado');
@@ -40,6 +42,12 @@ export function AvaliacaoFisica() {
   const [isDragging, setIsDragging] = useState(false);
   const [confirmedStep3, setConfirmedStep3] = useState(false);
   const [showConfirmationMessage, setShowConfirmationMessage] = useState(false);
+  
+  // Estados para o modal de consentimento
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [consentRejected, setConsentRejected] = useState(false);
+  const [checkingConsent, setCheckingConsent] = useState(true);
 
   // Usando o getThemeClass para obter as classes do tema
   const themeClasses = {
@@ -181,6 +189,39 @@ export function AvaliacaoFisica() {
       document.head.removeChild(style);
     };
   }, [isDarkMode]);
+
+  // UseEffect para verificar consentimento
+  useEffect(() => {
+    const checkConsent = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          navigate('/login');
+          return;
+        }
+
+        const consent = await TermsService.hasUserConsented(user.id, 'AVALIACAO_FISICA_NUTRICIONAL');
+        
+        if (consent === null) {
+          // Usuário nunca deu consentimento, mostrar modal
+          setShowConsentModal(true);
+        } else if (consent === false) {
+          // Usuário rejeitou o termo
+          setConsentRejected(true);
+        } else {
+          // Usuário aceitou o termo
+          setConsentChecked(true);
+        }
+      } catch (error) {
+        console.error('Erro ao verificar consentimento:', error);
+        setErro('Erro ao carregar página. Tente novamente.');
+      } finally {
+        setCheckingConsent(false);
+      }
+    };
+
+    checkConsent();
+  }, [navigate]);
 
   useEffect(() => {
     // Remover qualquer rascunho existente ao carregar o componente
@@ -466,6 +507,58 @@ export function AvaliacaoFisica() {
     }
   }, [currentStep]);
 
+  // Funções para lidar com o consentimento
+  const handleConsentAccept = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setErro('Usuário não autenticado');
+        return;
+      }
+
+      const success = await TermsService.recordConsent(user.id, 'AVALIACAO_FISICA_NUTRICIONAL', true);
+      if (success) {
+        setConsentChecked(true);
+        setShowConsentModal(false);
+      } else {
+        setErro('Erro ao registrar consentimento. Tente novamente.');
+      }
+    } catch (error) {
+      console.error('Erro ao aceitar consentimento:', error);
+      setErro('Erro ao registrar consentimento. Tente novamente.');
+    }
+  };
+
+  const handleConsentReject = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setErro('Usuário não autenticado');
+        return;
+      }
+
+      const success = await TermsService.recordConsent(user.id, 'AVALIACAO_FISICA_NUTRICIONAL', false);
+      if (success) {
+        setConsentRejected(true);
+        setShowConsentModal(false);
+        // Redirecionar para o dashboard após rejeitar
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 3000);
+      } else {
+        setErro('Erro ao registrar consentimento. Tente novamente.');
+      }
+    } catch (error) {
+      console.error('Erro ao rejeitar consentimento:', error);
+      setErro('Erro ao registrar consentimento. Tente novamente.');
+    }
+  };
+
+  const handleConsentClose = () => {
+    // Fechar modal sem consentimento redireciona para dashboard
+    navigate('/dashboard');
+  };
+
   return (
     <Layout>
       <div className={`min-h-screen ${themeClasses.background} relative overflow-hidden`}>
@@ -515,6 +608,47 @@ export function AvaliacaoFisica() {
         
 
         
+        {/* Loading de verificação de consentimento */}
+        {checkingConsent && (
+          <div className="relative z-10 flex items-center justify-center min-h-screen">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+              <p className={`${themeClasses.textSecondary}`}>Verificando permissões...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Tela de consentimento rejeitado */}
+        {consentRejected && (
+          <div className="relative z-10 flex items-center justify-center min-h-screen px-4">
+            <div className={`text-center max-w-md p-8 rounded-2xl ${themeClasses.card}`}>
+              <div className={`w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center ${
+                isDarkMode ? 'bg-red-900/30' : 'bg-red-100'
+              }`}>
+                <AlertCircle className={`h-8 w-8 ${isDarkMode ? 'text-red-400' : 'text-red-500'}`} />
+              </div>
+              <h3 className={`text-xl font-bold mb-4 ${themeClasses.text}`}>
+                Acesso Negado
+              </h3>
+              <p className={`${themeClasses.textSecondary} mb-6`}>
+                Você optou por não aceitar os termos de consentimento. Para preencher a avaliação física, 
+                é necessário aceitar os termos.
+              </p>
+              <p className={`text-sm ${themeClasses.textSecondary} mb-6`}>
+                Redirecionando para o dashboard em alguns segundos...
+              </p>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className={`w-full px-6 py-3 rounded-xl font-semibold ${themeClasses.button}`}
+              >
+                Voltar ao Dashboard
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Conteúdo principal - apenas se consentimento foi dado */}
+        {consentChecked && (
         <div className="relative z-10 max-w-4xl mx-auto px-4 py-6">
           {/* Header melhorado */}
           <div className="mb-8">
@@ -1129,6 +1263,16 @@ export function AvaliacaoFisica() {
             </div>
           )}
         </div>
+        )}
+
+        {/* Modal de Consentimento */}
+        <ConsentModal
+          isOpen={showConsentModal}
+          termType="AVALIACAO_FISICA_NUTRICIONAL"
+          onAccept={handleConsentAccept}
+          onReject={handleConsentReject}
+          onClose={handleConsentClose}
+        />
       </div>
     </Layout>
   );

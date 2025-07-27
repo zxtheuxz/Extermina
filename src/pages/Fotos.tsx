@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useActivityLoggerContext } from '../providers/ActivityLoggerProvider';
+import { ConsentModal } from '../components/ConsentModal';
+import { TermsService } from '../lib/termsService';
 
 interface PerfilFotos {
   nome_completo?: string;
@@ -55,6 +57,12 @@ export function Fotos() {
   const isDarkMode = theme === 'dark';
   const navigate = useNavigate();
   const activityLogger = useActivityLoggerContext();
+  
+  // Estados para o modal de consentimento
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [consentRejected, setConsentRejected] = useState(false);
+  const [checkingConsent, setCheckingConsent] = useState(false);
 
   // Hook para fechar modal com tecla ESC
   useEffect(() => {
@@ -101,6 +109,36 @@ export function Fotos() {
             setError('Erro ao carregar suas fotos. Tente novamente.');
           } else {
             setPerfil(perfilData);
+            
+            // Verificar se o usuário tem fotos e precisa de consentimento
+            const temFotos = perfilData && (
+              perfilData.foto_frente_url ||
+              perfilData.foto_costas_url ||
+              perfilData.foto_lateral_direita_url ||
+              perfilData.foto_lateral_esquerda_url ||
+              perfilData.foto_abertura_url
+            );
+            
+            if (temFotos) {
+              // Verificar consentimento para envio de fotos
+              setCheckingConsent(true);
+              const consent = await TermsService.hasUserConsented(user.id, 'ENVIO_FOTOS');
+              
+              if (consent === null) {
+                // Usuário nunca deu consentimento, mostrar modal
+                setShowConsentModal(true);
+              } else if (consent === false) {
+                // Usuário rejeitou o termo (não bloqueia acesso, apenas registra)
+                setConsentRejected(true);
+              } else {
+                // Usuário aceitou o termo
+                setConsentChecked(true);
+              }
+              setCheckingConsent(false);
+            } else {
+              // Sem fotos, não precisa de consentimento
+              setConsentChecked(true);
+            }
           }
 
           // Buscar laudos médicos na tabela analises_medicamentos
@@ -193,13 +231,66 @@ export function Fotos() {
     }
   };
 
-  if (loading) {
+  // Funções para lidar com o consentimento
+  const handleConsentAccept = async () => {
+    try {
+      if (!user) {
+        setError('Usuário não autenticado');
+        return;
+      }
+
+      const success = await TermsService.recordConsent(user.id, 'ENVIO_FOTOS', true);
+      if (success) {
+        setConsentChecked(true);
+        setShowConsentModal(false);
+      } else {
+        setError('Erro ao registrar consentimento. Tente novamente.');
+      }
+    } catch (error) {
+      console.error('Erro ao aceitar consentimento:', error);
+      setError('Erro ao registrar consentimento. Tente novamente.');
+    }
+  };
+
+  const handleConsentReject = async () => {
+    try {
+      if (!user) {
+        setError('Usuário não autenticado');
+        return;
+      }
+
+      const success = await TermsService.recordConsent(user.id, 'ENVIO_FOTOS', false);
+      if (success) {
+        setConsentRejected(true);
+        setConsentChecked(true); // Permite acesso mesmo rejeitando (fotos não são obrigatórias)
+        setShowConsentModal(false);
+      } else {
+        setError('Erro ao registrar consentimento. Tente novamente.');
+      }
+    } catch (error) {
+      console.error('Erro ao rejeitar consentimento:', error);
+      setError('Erro ao registrar consentimento. Tente novamente.');
+    }
+  };
+
+  const handleConsentClose = () => {
+    // Para fotos, fechar sem consentimento ainda permite acesso
+    setConsentChecked(true);
+    setShowConsentModal(false);
+  };
+
+  if (loading || checkingConsent) {
     return (
       <Layout>
         <div className={`flex items-center justify-center min-h-screen ${
           isDarkMode ? 'bg-black' : 'bg-gray-50'
         }`}>
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500 mx-auto mb-4"></div>
+            <p className={`${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              {loading ? 'Carregando suas fotos...' : 'Verificando permissões...'}
+            </p>
+          </div>
         </div>
       </Layout>
     );
@@ -246,7 +337,8 @@ export function Fotos() {
       <div className={`min-h-screen ${
         isDarkMode ? 'bg-black' : 'bg-gray-50'
       } px-4 py-8 relative`}>
-        <div className="max-w-7xl mx-auto">
+        {consentChecked && (
+          <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className={`mb-8 ${semFotosELaudos ? 'blur-sm' : ''}`}>
             <h1 className={`text-4xl font-bold mb-2 ${
@@ -459,6 +551,7 @@ export function Fotos() {
             )}
           </div>
         </div>
+        )}
 
         {/* Overlay quando não há fotos nem laudos */}
         {semFotosELaudos && (
@@ -542,6 +635,15 @@ export function Fotos() {
             </div>
           </div>
         )}
+
+        {/* Modal de Consentimento */}
+        <ConsentModal
+          isOpen={showConsentModal}
+          termType="ENVIO_FOTOS"
+          onAccept={handleConsentAccept}
+          onReject={handleConsentReject}
+          onClose={handleConsentClose}
+        />
       </div>
     </Layout>
   );
