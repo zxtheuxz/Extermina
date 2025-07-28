@@ -46,6 +46,7 @@ export interface ResultadoAnalise {
   indices: IndicesRisco;
   medidas: MedidasCorporais;
   perfil: PerfilUsuario;
+  indicadoresAvancados?: any; // Opcional para manter compatibilidade
 }
 
 /**
@@ -265,49 +266,51 @@ export const classificarIndiceMassaGorda = (img: number): ClassificacaoRisco => 
 };
 
 /**
- * Calcula percentual de gordura melhorado (igual ao concorrente)
+ * Calcula percentual de gordura usando Deurenberg (1991) com ajustes proprietários
+ * Baseado na engenharia reversa do Shaped
  */
 export const calcularPercentualGordura = (medidas: MedidasCorporais, perfil: PerfilUsuario): number => {
-  const { idade, sexo } = perfil;
-  let percentualGordura: number;
-
+  const { altura, peso, idade, sexo } = perfil;
+  
+  // Calcular IMC
+  const imc = peso / Math.pow(altura, 2);
+  
+  // Calcular relação cintura/quadril
+  const relacaoCinturaQuadril = medidas.cintura / medidas.quadril;
+  
+  // Fórmula base de Deurenberg (1991)
+  const sexoFator = sexo === 'M' ? 1 : 0;
+  const percentualBase = (1.20 * imc) + (0.23 * idade) - (10.8 * sexoFator) - 5.4;
+  
+  // Aplicar ajustes proprietários baseados em sexo e relação cintura/quadril
+  let fatorAjuste = 1.0;
+  
   if (sexo === 'M') {
-    // Fórmula Jackson & Pollock adaptada para homens - ajustada para 20,8% vs 26,8%
-    const somaCircunferencias = 
-      (medidas.bracos * 0.50) + // Reduzido de 0.65 (-23%)
-      (medidas.cintura * 0.58) + // Reduzido de 0.75 (-23%)
-      (medidas.coxas * 0.42) + // Reduzido de 0.55 (-23%)
-      (medidas.antebracos * 0.35) + // Reduzido de 0.45 (-23%)
-      (medidas.quadril * 0.50) + // Reduzido de 0.65 (-23%)
-      (medidas.panturrilhas * 0.23); // Reduzido de 0.3 (-23%)
-
-    const densidadeCorporal = 1.112 - 
-      (0.00043499 * somaCircunferencias) + 
-      (0.00000055 * Math.pow(somaCircunferencias, 2)) - 
-      (0.00028826 * idade);
-    
-    percentualGordura = ((4.95 / densidadeCorporal) - 4.5) * 100;
-    
+    // Homens: redução baseada em C/Q (quanto menor C/Q, maior redução)
+    if (relacaoCinturaQuadril <= 0.84) {
+      fatorAjuste = 0.75; // Redução de 25% para ectomorfos
+    } else if (relacaoCinturaQuadril >= 0.87) {
+      fatorAjuste = 0.83; // Redução de 17% para endomorfos
+    } else {
+      // Interpolação linear entre 0.84 e 0.87
+      fatorAjuste = 0.75 + (0.08 * (relacaoCinturaQuadril - 0.84) / 0.03);
+    }
   } else {
-    // Fórmula Jackson, Pollock & Ward para mulheres - ajustada para redução de 23%
-    const somaCircunferencias = 
-      (medidas.coxas * 0.50) + // Reduzido de 0.65 (-23%)
-      (medidas.cintura * 0.58) + // Reduzido de 0.75 (-23%)
-      (medidas.bracos * 0.42) + // Reduzido de 0.55 (-23%)
-      (medidas.quadril * 0.50) + // Reduzido de 0.65 (-23%)
-      (medidas.antebracos * 0.35) + // Reduzido de 0.45 (-23%)
-      (medidas.panturrilhas * 0.27); // Reduzido de 0.35 (-23%)
-
-    const densidadeCorporal = 1.097 - 
-      (0.00046971 * somaCircunferencias) + 
-      (0.00000056 * Math.pow(somaCircunferencias, 2)) - 
-      (0.00012828 * idade);
-    
-    percentualGordura = ((4.95 / densidadeCorporal) - 4.5) * 100;
+    // Mulheres: leve aumento baseado em C/Q
+    if (relacaoCinturaQuadril <= 0.78) {
+      fatorAjuste = 1.04; // Aumento de 4%
+    } else if (relacaoCinturaQuadril <= 0.85) {
+      // Interpolação linear entre 0.78 e 0.85
+      fatorAjuste = 1.04 + (0.04 * (relacaoCinturaQuadril - 0.78) / 0.07);
+    } else {
+      fatorAjuste = 1.08; // Aumento de 8% para C/Q alto
+    }
   }
-
+  
+  const percentualFinal = percentualBase * fatorAjuste;
+  
   // Garantir que o resultado esteja dentro de faixas realistas
-  return Math.max(3, Math.min(50, percentualGordura));
+  return Math.max(3, Math.min(50, Math.round(percentualFinal * 10) / 10));
 };
 
 /**
@@ -326,10 +329,9 @@ export const calcularComposicaoCorporal = (
   const massaGorda = (percentualGordura / 100) * peso;
   const massaMagra = peso - massaGorda;
   
-  // TMB usando Harris-Benedict (alinhado com SHAPED)
-  const tmb = perfil.sexo === 'M' 
-    ? 88.362 + (13.397 * peso) + (4.799 * altura * 100) - (5.677 * perfil.idade)
-    : 447.593 + (9.247 * peso) + (3.098 * altura * 100) - (4.330 * perfil.idade);
+  // TMB usando Cunningham (1980) - alinhado com SHAPED
+  // TMB = 500 + (22 × Massa Magra em kg)
+  const tmb = 500 + (22 * massaMagra);
   
   // IMC
   const imc = peso / Math.pow(altura, 2);
@@ -350,7 +352,8 @@ export const calcularComposicaoCorporal = (
 };
 
 /**
- * Calcula Shaped Score baseado em todos os indicadores (0-100) - calibrado com SHAPED
+ * Calcula Índice Grimaldi (Shaped Score) baseado em todos os indicadores (0-100)
+ * Ajustado para ser menos rigoroso e alinhado com valores do Shaped
  */
 export const calcularShapedScore = (indices: Omit<IndicesRisco, 'indiceGrimaldi'>): number => {
   let pontuacao = 0;
@@ -359,32 +362,37 @@ export const calcularShapedScore = (indices: Omit<IndicesRisco, 'indiceGrimaldi'
   // Cada indicador vale até ~16.67 pontos (100/6)
   const pontosPorIndicador = 100 / totalIndicadores;
 
-  // Índice de massa gorda - ainda mais rigoroso (reduzir 25 pontos)
-  if (indices.indiceMassaGorda.faixa === 'ADEQUADO') pontuacao += pontosPorIndicador;
-  else if (indices.indiceMassaGorda.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.2; // mais rigoroso
-  else pontuacao += pontosPorIndicador * 0.05; // mais rigoroso
+  // Índice de massa gorda - menos rigoroso
+  if (indices.indiceMassaGorda.faixa === 'BAIXO_RISCO') pontuacao += pontosPorIndicador;
+  else if (indices.indiceMassaGorda.faixa === 'ADEQUADO') pontuacao += pontosPorIndicador * 0.85;
+  else if (indices.indiceMassaGorda.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.6;
+  else pontuacao += pontosPorIndicador * 0.3;
 
-  // Índice de massa magra - ainda mais rigoroso
+  // Índice de massa magra - menos rigoroso
   if (indices.indiceMassaMagra.faixa === 'ADEQUADO') pontuacao += pontosPorIndicador;
-  else pontuacao += pontosPorIndicador * 0.1; // mais rigoroso
+  else if (indices.indiceMassaMagra.faixa === 'BAIXO_RISCO') pontuacao += pontosPorIndicador * 0.7;
+  else pontuacao += pontosPorIndicador * 0.4;
 
-  // Razão cintura/quadril - ainda mais rigoroso
+  // Razão cintura/quadril - menos rigoroso
   if (indices.razaoCinturaQuadril.faixa === 'ADEQUADO') pontuacao += pontosPorIndicador;
-  else pontuacao += pontosPorIndicador * 0.05; // mais rigoroso
+  else pontuacao += pontosPorIndicador * 0.5;
 
-  // Razão cintura/estatura - ainda mais rigoroso
+  // Razão cintura/estatura - menos rigoroso
   if (indices.razaoCinturaEstatura.faixa === 'BAIXO_RISCO') pontuacao += pontosPorIndicador;
-  else if (indices.razaoCinturaEstatura.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.2; // mais rigoroso
-  else pontuacao += pontosPorIndicador * 0.05; // mais rigoroso
+  else if (indices.razaoCinturaEstatura.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.65;
+  else pontuacao += pontosPorIndicador * 0.3;
 
-  // Índice de conicidade - ainda mais rigoroso
+  // Índice de conicidade - menos rigoroso
   if (indices.indiceConicidade.faixa === 'ADEQUADO') pontuacao += pontosPorIndicador;
-  else pontuacao += pontosPorIndicador * 0.1; // mais rigoroso
+  else pontuacao += pontosPorIndicador * 0.5;
 
-  // Cintura - ainda mais rigoroso
+  // Cintura - menos rigoroso
   if (indices.cintura.faixa === 'BAIXO_RISCO') pontuacao += pontosPorIndicador;
-  else if (indices.cintura.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.2; // mais rigoroso
-  else pontuacao += pontosPorIndicador * 0.05; // mais rigoroso
+  else if (indices.cintura.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.65;
+  else pontuacao += pontosPorIndicador * 0.3;
+
+  // Adicionar bônus base de 20 pontos para garantir valores mínimos mais altos
+  pontuacao += 20;
 
   return Math.round(Math.max(0, Math.min(100, pontuacao)));
 };
@@ -433,7 +441,8 @@ export const calcularIndicesRisco = (
  */
 export const analisarComposicaoCorporal = (
   medidas: MedidasCorporais,
-  perfil: PerfilUsuario
+  perfil: PerfilUsuario,
+  incluirIndicadoresAvancados: boolean = false
 ): ResultadoAnalise => {
   
   // Validar dados de entrada
@@ -460,12 +469,24 @@ export const analisarComposicaoCorporal = (
     // Calcular índices de risco
     const indices = calcularIndicesRisco(medidas, perfil, composicao);
     
-    return {
+    const resultado: ResultadoAnalise = {
       composicao,
       indices,
       medidas,
       perfil
     };
+    
+    // Adicionar indicadores avançados se solicitado
+    if (incluirIndicadoresAvancados) {
+      // Importação dinâmica para evitar carregar se não for necessário
+      import('./indicadoresAvancados').then(module => {
+        resultado.indicadoresAvancados = module.calcularIndicadoresAvancados(composicao, perfil, medidas);
+      }).catch(error => {
+        console.error('Erro ao carregar indicadores avançados:', error);
+      });
+    }
+    
+    return resultado;
     
   } catch (error) {
     console.error('Erro durante análise corporal:', error);

@@ -166,6 +166,18 @@ export function AnaliseCorporal() {
                     <p>
                       • <strong>Resultados visuais:</strong> Apresentamos os dados de forma clara com escalas coloridas e explicações detalhadas
                     </p>
+                    
+                    <div className={`mt-4 p-3 rounded-lg border-l-4 ${
+                      isDarkMode 
+                        ? 'bg-yellow-900/20 border-yellow-500/50' 
+                        : 'bg-yellow-50 border-yellow-400'
+                    }`}>
+                      <p className={`text-sm ${
+                        isDarkMode ? 'text-yellow-200' : 'text-yellow-800'
+                      }`}>
+                        <strong>⚠️ Importante:</strong> O sistema de análise automatizada pode apresentar uma margem de variação de 0 a 5cm nas medidas corporais. Os resultados são estimativas baseadas em algoritmos avançados e devem ser considerados como referência orientativa.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

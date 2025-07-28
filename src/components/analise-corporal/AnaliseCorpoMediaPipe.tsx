@@ -3,6 +3,7 @@ import { Pose, Results } from '@mediapipe/pose';
 import { SelfieSegmentation } from '@mediapipe/selfie_segmentation';
 import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
 import { POSE_CONNECTIONS } from '@mediapipe/pose';
+import { FileText } from 'lucide-react';
 import LoadingAnalise from './LoadingAnalise';
 
 interface MedidasExtraidas {
@@ -14,7 +15,7 @@ interface MedidasExtraidas {
   panturrilhas: number;
 }
 
-// 🎯 PROPORÇÕES v11.1 (CALIBRAÇÃO UNIVERSAL)
+// 🎯 PROPORÇÕES v11.5 (CALIBRAÇÃO UNIVERSAL COM BIOTIPO)
 const PROPORCOES_ANTROPOMETRICAS = {
   homem: { 
     cintura: 0.503,
@@ -31,6 +32,34 @@ const PROPORCOES_ANTROPOMETRICAS = {
     antebracos: 0.155,
     coxas: 0.343,
     panturrilhas: 0.210
+  }
+};
+
+// 🔧 FATORES DE CORREÇÃO POR BIOTIPO v11.5
+const FATORES_CORRECAO_MEDIAPIPE = {
+  ectomorfo: { // IMC < 23
+    cintura: 0.92,      // -8% (corrige superestimação)
+    quadril: 0.90,      // -10% (corrige superestimação)
+    bracos: 0.96,       // -4%
+    antebracos: 0.99,   // -1%
+    coxas: 0.94,        // -6% (ajustado v11.3: era 0.96)
+    panturrilhas: 0.93  // -7%
+  },
+  endomorfo: { // IMC > 27
+    cintura: 1.02,      // +2%
+    quadril: 1.03,      // +3%
+    bracos: 0.93,       // -7%
+    antebracos: 0.97,   // -3%
+    coxas: 0.98,        // -2%
+    panturrilhas: 0.93  // -7%
+  },
+  femininoMesomorfo: { // Mulheres 23 ≤ IMC < 27
+    cintura: 1.035,     // +3.5% (corrige subestimação)
+    quadril: 0.985,     // -1.5% (CORREÇÃO v11.5: reduz em vez de aumentar!)
+    bracos: 0.91,       // -9% (corrige superestimação)
+    antebracos: 0.94,   // -6%
+    coxas: 1.005,       // +0.5%
+    panturrilhas: 1.01  // +1%
   }
 };
 
@@ -55,13 +84,17 @@ const calcularFatorBiotipo = (imc: number, tipoMedida: keyof MedidasExtraidas): 
   return 1.15;
 };
 
-// ⚖️ SISTEMA DE PESOS HÍBRIDO v9.0 (ALTERADO PARA SER USADO NA REGRA DE EXCEÇÃO)
+// ⚖️ SISTEMA DE PESOS HÍBRIDO v11.2 (AJUSTADO POR BIOTIPO)
 const obterPesosHibridos = (imc: number, tipoMedida: keyof MedidasExtraidas): { pesoVisual: number, pesoEstatistico: number } => {
     if (imc < 23) {
-        return { pesoVisual: 0.60, pesoEstatistico: 0.40 };
+        // Ectomorfos: confie mais nas proporções estatísticas
+        return { pesoVisual: 0.30, pesoEstatistico: 0.70 };
+    } else if (imc >= 27) {
+        // Endomorfos: balance equilibrado
+        return { pesoVisual: 0.50, pesoEstatistico: 0.50 };
     }
-    // Para todos os outros casos, o padrão é 50/50, a regra de exceção cuidará dos casos de IMC alto
-    return { pesoVisual: 0.50, pesoEstatistico: 0.50 };
+    // Eutróficos (23 <= IMC < 27): favorece visual
+    return { pesoVisual: 0.60, pesoEstatistico: 0.40 };
 };
 
 
@@ -141,21 +174,56 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
       const tipoMedida = key as keyof MedidasExtraidas;
       const medidaPorProporcao = calcularPorProporcoes(tipoMedida);
       
-      // 🔥 REGRA DE EXCEÇÃO v11.1 🔥
-      // Sistema universal calibrado para IMCs altos (sem hardcode!)
-      if ((tipoMedida === 'cintura' || tipoMedida === 'quadril') && imc >= 27) {
-          // Cálculo dinâmico baseado no IMC real da pessoa
-          // Fator progressivo: aumenta 1.8% para cada ponto de IMC acima de 25
-          const fatorIMC = 1 + ((imc - 25) * 0.018);
+      console.log(`📊 ${tipoMedida}: Proporção calculada = ${medidaPorProporcao.toFixed(1)}cm (inclui fator biotipo)`);
+      
+      // 🔥 REGRA DE EXCEÇÃO v11.5 🔥
+      // Sistema universal calibrado por biotipo
+      
+      // PRIORIDADE 1: Correção para ectomorfos (IMC < 23)
+      if (imc < 23) {
+          const fatorEctomorfo = FATORES_CORRECAO_MEDIAPIPE.ectomorfo[tipoMedida];
+          // Aplicar correção direto na proporção base (sem fator de biotipo)
+          const proporcoes = sexo === 'F' ? PROPORCOES_ANTROPOMETRICAS.mulher : PROPORCOES_ANTROPOMETRICAS.homem;
+          const medidaBase = (alturaReal * 100) * proporcoes[tipoMedida];
+          medidasFinais[tipoMedida] = medidaBase * fatorEctomorfo;
           
-          // Ajuste fino por região corporal (calibrado para precisão)
-          // Cintura tende a acumular menos que quadril em endomorphos
-          const ajusteRegional = tipoMedida === 'cintura' ? 0.96 : 0.98;
+          console.log(`🔥 ${tipoMedida}: Correção Ectomorfo v11.5 para IMC ${imc.toFixed(1)}`);
+          console.log(`   Base: ${medidaBase.toFixed(1)}cm → Corrigida: ${medidasFinais[tipoMedida].toFixed(1)}cm (Fator: ${fatorEctomorfo}x)`);
+          return; // Pula para a próxima medida
+      }
+      
+      // PRIORIDADE 2: Mulheres Mesomorfas (F, 23 ≤ IMC < 27) - NOVA v11.3
+      if (sexo === 'F' && imc >= 23 && imc < 27) {
+          const fatorFemininoMeso = FATORES_CORRECAO_MEDIAPIPE.femininoMesomorfo[tipoMedida];
+          const proporcoes = PROPORCOES_ANTROPOMETRICAS.mulher;
+          const medidaBase = (alturaReal * 100) * proporcoes[tipoMedida];
+          medidasFinais[tipoMedida] = medidaBase * fatorFemininoMeso;
           
-          // Aplica correção proporcional ao biotipo
-          medidasFinais[tipoMedida] = medidaPorProporcao * fatorIMC * ajusteRegional;
+          console.log(`🔥 ${tipoMedida}: Correção Feminino Mesomorfo v11.5 para IMC ${imc.toFixed(1)}`);
+          console.log(`   Base: ${medidaBase.toFixed(1)}cm → Corrigida: ${medidasFinais[tipoMedida].toFixed(1)}cm (Fator: ${fatorFemininoMeso}x)`);
+          return; // Pula para a próxima medida
+      }
+      
+      // PRIORIDADE 3: Sistema existente para endomorfos (IMC >= 27)
+      if (imc >= 27) {
+          const fatorEndomorfo = FATORES_CORRECAO_MEDIAPIPE.endomorfo[tipoMedida];
+          const proporcoes = sexo === 'F' ? PROPORCOES_ANTROPOMETRICAS.mulher : PROPORCOES_ANTROPOMETRICAS.homem;
+          const medidaBase = (alturaReal * 100) * proporcoes[tipoMedida];
           
-          console.log(`🔥 ${tipoMedida}: Sistema v11.1 para IMC ${imc.toFixed(1)} - Fator: ${(fatorIMC * ajusteRegional).toFixed(3)}x = ${medidasFinais[tipoMedida].toFixed(1)}cm`);
+          if (tipoMedida === 'cintura' || tipoMedida === 'quadril') {
+              // Para tronco: aplicar fator progressivo adicional
+              const fatorIMC = 1 + ((imc - 25) * 0.018);
+              medidasFinais[tipoMedida] = medidaBase * fatorIMC * fatorEndomorfo;
+              
+              console.log(`🔥 ${tipoMedida}: Correção Endomorfo v11.5 para IMC ${imc.toFixed(1)}`);
+              console.log(`   Base: ${medidaBase.toFixed(1)}cm → Corrigida: ${medidasFinais[tipoMedida].toFixed(1)}cm (Fator: ${(fatorIMC * fatorEndomorfo).toFixed(3)}x)`);
+          } else {
+              // Para membros: aplicar apenas fator de correção
+              medidasFinais[tipoMedida] = medidaBase * calcularFatorBiotipo(imc, tipoMedida) * fatorEndomorfo;
+              
+              console.log(`🔥 ${tipoMedida}: Correção Membros Endomorfo v11.5`);
+              console.log(`   Base: ${medidaBase.toFixed(1)}cm → Corrigida: ${medidasFinais[tipoMedida].toFixed(1)}cm (Fator: ${fatorEndomorfo}x)`);
+          }
           return; // Pula para a próxima medida
       }
 
@@ -169,11 +237,23 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
       if (medida3D > 0) {
         const diferencaPercentual = Math.abs(medida3D - medidaPorProporcao) / medidaPorProporcao;
         
-        if (diferencaPercentual > 0.30) {
-            console.warn(`🛡️ ${tipoMedida}: Medida 3D descartada por segurança.`);
+        // Validação mais rigorosa para ectomorfos
+        const limiteSeguranca = imc < 23 ? 0.25 : 0.30;
+        
+        if (diferencaPercentual > limiteSeguranca) {
+            console.warn(`🛡️ ${tipoMedida}: Medida 3D descartada por segurança (${(diferencaPercentual * 100).toFixed(1)}% > ${(limiteSeguranca * 100)}%).`);
         } else {
           const { pesoVisual, pesoEstatistico } = obterPesosHibridos(imc, tipoMedida);
           resultadoFinal = (medida3D * pesoVisual) + (medidaPorProporcao * pesoEstatistico);
+          
+          // Validação adicional para ectomorfos
+          if (imc < 23 && (tipoMedida === 'cintura' || tipoMedida === 'quadril')) {
+            // Se ainda estiver superestimando, aplica correção extra
+            if (resultadoFinal > medidaPorProporcao * 1.05) {
+              resultadoFinal = medidaPorProporcao * 1.02; // Limita a no máximo 2% acima da proporção
+              console.log(`🛡️ ${tipoMedida}: Correção extra ectomorfo aplicada.`);
+            }
+          }
         }
       }
       medidasFinais[tipoMedida] = resultadoFinal;
@@ -212,7 +292,7 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
       setCurrentStep('preparing');
       const imc = peso / (alturaReal * alturaReal);
       const biotipo = detectarBiotipo(imc);
-      console.log(`🚀 Iniciando Sistema v11.1 Universal | Perfil: ${sexo}, ${alturaReal}m, ${peso}kg, IMC ${imc.toFixed(1)}, Biotipo: ${biotipo}`);
+      console.log(`🚀 Iniciando Sistema v11.5 Universal | Perfil: ${sexo}, ${alturaReal}m, ${peso}kg, IMC ${imc.toFixed(1)}, Biotipo: ${biotipo}`);
       
       setCurrentStep('processing_frontal');
       const resultsFrontal = await processarImagem(fotoAberturaUrl, canvasAberturaRef.current);
@@ -239,21 +319,24 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
       <div className="text-center">
         <button
           onClick={iniciarAnalise}
-          className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg disabled:opacity-50"
+          className="w-full max-w-md mx-auto flex items-center justify-center gap-3 py-4 px-8 rounded-xl font-bold text-lg bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 text-white disabled:opacity-50 disabled:transform-none"
           disabled={wasmSupported === null}
         >
-          {wasmSupported ? '🏆 Analisar com v11.1 Universal' : '🔄 Verificando...'}
+          {wasmSupported ? (
+            <>
+              <FileText className="w-5 h-5" />
+              Clique aqui e gere o relatório
+            </>
+          ) : (
+            '🔄 Verificando...'
+          )}
         </button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <h3 className="text-lg font-semibold mb-2">📸 Foto Lateral (Referência)</h3>
-          <canvas ref={canvasLateralRef} className="w-full border rounded-lg" />
-        </div>
-        <div>
-          <h3 className="text-lg font-semibold mb-2">📸 Foto Abertura (Principal)</h3>
-          <canvas ref={canvasAberturaRef} className="w-full border rounded-lg" />
-        </div>
+      
+      {/* Canvas ocultos necessários para o MediaPipe processar as imagens */}
+      <div style={{ display: 'none' }}>
+        <canvas ref={canvasLateralRef} />
+        <canvas ref={canvasAberturaRef} />
       </div>
     </div>
   );

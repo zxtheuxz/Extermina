@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAnaliseCorpData } from '../../hooks/useAnaliseCorpData';
 import ResultadosAnalise from './ResultadosAnalise';
 import LoadingAnalise from './LoadingAnalise';
+import AnaliseCorpoMediaPipe from './AnaliseCorpoMediaPipe';
 import { analisarComposicaoCorporal, ResultadoAnalise } from '../../utils/calculosComposicaoCorporal';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,6 +23,7 @@ const MedidasCorporais: React.FC = () => {
   const [pageReady, setPageReady] = useState(false);
   const [loadingStep, setLoadingStep] = useState('profile');
   const [analiseAutomatica, setAnaliseAutomatica] = useState(false);
+  const [mostrarMediaPipe, setMostrarMediaPipe] = useState(false);
 
   // Controlar loading unificado - AGUARDA TUDO ESTAR PRONTO
   useEffect(() => {
@@ -65,62 +67,9 @@ const MedidasCorporais: React.FC = () => {
     };
 
     if (podeAnalisar() && !analiseAutomatica) {
-      console.log('🚀 Iniciando análise automática...');
+      console.log('🚀 Iniciando análise automática com MediaPipe v11.2...');
       setAnaliseAutomatica(true);
-      
-      // Calcular medidas usando proporções antropométricas (fallback method)
-      const calcularMedidasPorProporcoes = () => {
-        const altura = dadosCorporais!.altura;
-        const peso = dadosCorporais!.peso;
-        const sexo = dadosCorporais!.sexo;
-        const imc = peso / (altura * altura);
-        
-        // Proporções antropométricas baseadas no sexo
-        const PROPORCOES = {
-          homem: { 
-            cintura: 0.503, quadril: 0.556, bracos: 0.187, 
-            antebracos: 0.169, coxas: 0.326, panturrilhas: 0.218
-          },
-          mulher: {
-            cintura: 0.485, quadril: 0.578, bracos: 0.180,
-            antebracos: 0.155, coxas: 0.343, panturrilhas: 0.210
-          }
-        };
-        
-        const proporcoes = sexo === 'F' ? PROPORCOES.mulher : PROPORCOES.homem;
-        const alturaEmCm = altura * 100;
-        
-        // Fator de ajuste baseado no IMC
-        const calcularFatorBiotipo = (tipoMedida: string): number => {
-          if (tipoMedida === 'cintura' || tipoMedida === 'quadril') {
-            if (imc < 26.5) return 1.00;
-            if (imc < 27.0) return 1.02;
-            if (imc < 28.0) return 1.04;
-            if (imc < 29.5) return 1.06;
-            if (imc < 32.0) return 1.08;
-            return 1.10;
-          }
-          // Membros
-          if (imc < 18.5) return 0.88;
-          if (imc < 21.0) return 0.92;
-          if (imc < 24.0) return 0.96;
-          if (imc < 27.0) return 1.00;
-          if (imc < 30.0) return 1.04;
-          return 1.08;
-        };
-        
-        return {
-          bracos: alturaEmCm * proporcoes.bracos * calcularFatorBiotipo('bracos'),
-          antebracos: alturaEmCm * proporcoes.antebracos * calcularFatorBiotipo('antebracos'),
-          cintura: alturaEmCm * proporcoes.cintura * calcularFatorBiotipo('cintura'),
-          quadril: alturaEmCm * proporcoes.quadril * calcularFatorBiotipo('quadril'),
-          coxas: alturaEmCm * proporcoes.coxas * calcularFatorBiotipo('coxas'),
-          panturrilhas: alturaEmCm * proporcoes.panturrilhas * calcularFatorBiotipo('panturrilhas')
-        };
-      };
-      
-      const medidasCalculadas = calcularMedidasPorProporcoes();
-      handleMedidasExtraidas(medidasCalculadas);
+      setMostrarMediaPipe(true);
     }
   }, [loading, error, isAnalyzing, pageReady, hasMedidasExistentes, resultadoAnalise, dadosCorporais, fotos, liberado, analiseAutomatica]);
 
@@ -391,9 +340,28 @@ const MedidasCorporais: React.FC = () => {
   }
 
   // Se chegou aqui, tem tudo necessário para análise automática
-  // Mas se não está fazendo análise automática ainda, mostra loading
-  if (analiseAutomatica) {
-    const currentStep = isAnalyzing ? analysisStep : 'preparing';
+  // Mostrar MediaPipe para análise
+  if (mostrarMediaPipe && !resultadoAnalise) {
+    return (
+      <AnaliseCorpoMediaPipe
+        fotoLateralUrl={fotos!.foto_lateral_direita_url}
+        fotoAberturaUrl={fotos!.foto_abertura_url}
+        alturaReal={dadosCorporais!.altura}
+        peso={dadosCorporais!.peso}
+        sexo={dadosCorporais!.sexo === 'F' ? 'F' : 'M'}
+        onMedidasExtraidas={handleMedidasExtraidas}
+        onError={(error) => {
+          console.error('Erro no MediaPipe:', error);
+          setErrorAnalise(error);
+          setMostrarMediaPipe(false);
+        }}
+      />
+    );
+  }
+  
+  // Se está analisando mas não mostrando MediaPipe, mostra loading
+  if (isAnalyzing) {
+    const currentStep = analysisStep;
     return <LoadingAnalise step={currentStep as any} isDarkMode={isDarkMode} />;
   }
 
