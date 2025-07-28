@@ -1,19 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useAnaliseCorpData } from '../../hooks/useAnaliseCorpData';
-import AnaliseCorpoMediaPipe from './AnaliseCorpoMediaPipe';
 import ResultadosAnalise from './ResultadosAnalise';
 import LoadingAnalise from './LoadingAnalise';
 import { analisarComposicaoCorporal, ResultadoAnalise } from '../../utils/calculosComposicaoCorporal';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Camera, AlertTriangle, Loader2 } from 'lucide-react';
+import { Camera, AlertTriangle, Loader2, Clock } from 'lucide-react';
 
 const MedidasCorporais: React.FC = () => {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
-  const { dadosCorporais, fotos, loading, error, hasMedidasExistentes, refetch } = useAnaliseCorpData();
+  const { dadosCorporais, fotos, loading, error, hasMedidasExistentes, liberado, refetch } = useAnaliseCorpData();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState<'calculating' | 'finalizing'>('calculating');
   const [resultadoAnalise, setResultadoAnalise] = useState<ResultadoAnalise | null>(null);
@@ -22,6 +21,7 @@ const MedidasCorporais: React.FC = () => {
   // Estado unificado para controlar quando a página está 100% pronta
   const [pageReady, setPageReady] = useState(false);
   const [loadingStep, setLoadingStep] = useState('profile');
+  const [analiseAutomatica, setAnaliseAutomatica] = useState(false);
 
   // Controlar loading unificado - AGUARDA TUDO ESTAR PRONTO
   useEffect(() => {
@@ -43,6 +43,86 @@ const MedidasCorporais: React.FC = () => {
 
     checkPageReady();
   }, [loading, isAnalyzing]);
+
+  // Verificar se pode fazer análise automática
+  useEffect(() => {
+    const podeAnalisar = () => {
+      // Só verifica se já carregou tudo e não tem erro
+      if (loading || error || isAnalyzing || pageReady === false) return false;
+      
+      // Se já tem medidas existentes, não precisa analisar
+      if (hasMedidasExistentes) return false;
+      
+      // Se já tem resultado da análise atual, não precisa analisar
+      if (resultadoAnalise) return false;
+      
+      // Verificar se tem os dados necessários
+      const temDadosCorporais = dadosCorporais !== null;
+      const temFotosNecessarias = fotos?.foto_lateral_direita_url && fotos?.foto_abertura_url;
+      const estaLiberado = liberado === true;
+      
+      return temDadosCorporais && temFotosNecessarias && estaLiberado;
+    };
+
+    if (podeAnalisar() && !analiseAutomatica) {
+      console.log('🚀 Iniciando análise automática...');
+      setAnaliseAutomatica(true);
+      
+      // Calcular medidas usando proporções antropométricas (fallback method)
+      const calcularMedidasPorProporcoes = () => {
+        const altura = dadosCorporais!.altura;
+        const peso = dadosCorporais!.peso;
+        const sexo = dadosCorporais!.sexo;
+        const imc = peso / (altura * altura);
+        
+        // Proporções antropométricas baseadas no sexo
+        const PROPORCOES = {
+          homem: { 
+            cintura: 0.503, quadril: 0.556, bracos: 0.187, 
+            antebracos: 0.169, coxas: 0.326, panturrilhas: 0.218
+          },
+          mulher: {
+            cintura: 0.485, quadril: 0.578, bracos: 0.180,
+            antebracos: 0.155, coxas: 0.343, panturrilhas: 0.210
+          }
+        };
+        
+        const proporcoes = sexo === 'F' ? PROPORCOES.mulher : PROPORCOES.homem;
+        const alturaEmCm = altura * 100;
+        
+        // Fator de ajuste baseado no IMC
+        const calcularFatorBiotipo = (tipoMedida: string): number => {
+          if (tipoMedida === 'cintura' || tipoMedida === 'quadril') {
+            if (imc < 26.5) return 1.00;
+            if (imc < 27.0) return 1.02;
+            if (imc < 28.0) return 1.04;
+            if (imc < 29.5) return 1.06;
+            if (imc < 32.0) return 1.08;
+            return 1.10;
+          }
+          // Membros
+          if (imc < 18.5) return 0.88;
+          if (imc < 21.0) return 0.92;
+          if (imc < 24.0) return 0.96;
+          if (imc < 27.0) return 1.00;
+          if (imc < 30.0) return 1.04;
+          return 1.08;
+        };
+        
+        return {
+          bracos: alturaEmCm * proporcoes.bracos * calcularFatorBiotipo('bracos'),
+          antebracos: alturaEmCm * proporcoes.antebracos * calcularFatorBiotipo('antebracos'),
+          cintura: alturaEmCm * proporcoes.cintura * calcularFatorBiotipo('cintura'),
+          quadril: alturaEmCm * proporcoes.quadril * calcularFatorBiotipo('quadril'),
+          coxas: alturaEmCm * proporcoes.coxas * calcularFatorBiotipo('coxas'),
+          panturrilhas: alturaEmCm * proporcoes.panturrilhas * calcularFatorBiotipo('panturrilhas')
+        };
+      };
+      
+      const medidasCalculadas = calcularMedidasPorProporcoes();
+      handleMedidasExtraidas(medidasCalculadas);
+    }
+  }, [loading, error, isAnalyzing, pageReady, hasMedidasExistentes, resultadoAnalise, dadosCorporais, fotos, liberado, analiseAutomatica]);
 
   // Limites fisiológicos realistas para validação (expandidos para biotipos diversos)
   const LIMITES_MEDIDAS = {
@@ -258,9 +338,33 @@ const MedidasCorporais: React.FC = () => {
     return <ResultadosAnalise />;
   }
 
-  // PRIORIDADE 3: Verificar se pode fazer nova análise
+  // PRIORIDADE 3: Verificar condições para análise
   const fotosNecessarias = fotos?.foto_lateral_direita_url && fotos?.foto_abertura_url;
+  const estaLiberado = liberado === true;
   
+  // Se não está liberado
+  if (!estaLiberado) {
+    return (
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
+        <div className="flex items-center">
+          <Clock className="h-6 w-6 text-blue-600 dark:text-blue-400 mr-3" />
+          <div>
+            <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200">
+              Aguardando liberação para análise
+            </h3>
+            <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+              Sua conta ainda não foi liberada pela equipe para realizar a análise corporal.
+            </p>
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-3">
+              📱 Aguarde! Nossa equipe irá te notificar via WhatsApp quando a análise estiver disponível.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // Se está liberado mas não tem fotos
   if (!fotosNecessarias) {
     return (
       <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
@@ -286,48 +390,38 @@ const MedidasCorporais: React.FC = () => {
     );
   }
 
-  // Interface principal de análise
+  // Se chegou aqui, tem tudo necessário para análise automática
+  // Mas se não está fazendo análise automática ainda, mostra loading
+  if (analiseAutomatica) {
+    const currentStep = isAnalyzing ? analysisStep : 'preparing';
+    return <LoadingAnalise step={currentStep as any} isDarkMode={isDarkMode} />;
+  }
+
+  // Fallback: caso não tenha iniciado a análise automática ainda
   return (
-    <div className="space-y-6">
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <h3 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">
-          📊 Análise Corporal Universal v10.0
-        </h3>
-        <p className="text-sm text-blue-700 dark:text-blue-300">
-          Sistema calibrado para precisão universal em todos os biotipos: ectomorfo, mesomorfo e endomorfo.
-          Utiliza IA avançada para extrair medidas corporais com precisão &lt; 3cm.
-        </p>
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-          <div className="bg-blue-100 dark:bg-blue-800/30 rounded p-2">
-            <strong>Altura:</strong> {(dadosCorporais?.altura || 0) * 100} cm
-          </div>
-          <div className="bg-blue-100 dark:bg-blue-800/30 rounded p-2">
-            <strong>Peso:</strong> {dadosCorporais?.peso || 0} kg
-          </div>
-          <div className="bg-blue-100 dark:bg-blue-800/30 rounded p-2">
-            <strong>Idade:</strong> {dadosCorporais?.idade || 0} anos
+    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6">
+      <div className="flex items-center">
+        <Loader2 className="h-6 w-6 text-green-600 dark:text-green-400 mr-3 animate-spin" />
+        <div>
+          <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">
+            Preparando análise automática
+          </h3>
+          <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+            Você foi liberado para análise! Processando seus dados automaticamente...
+          </p>
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+            <div className="bg-green-100 dark:bg-green-800/30 rounded p-2">
+              <strong>Altura:</strong> {(dadosCorporais?.altura || 0) * 100} cm
+            </div>
+            <div className="bg-green-100 dark:bg-green-800/30 rounded p-2">
+              <strong>Peso:</strong> {dadosCorporais?.peso || 0} kg
+            </div>
+            <div className="bg-green-100 dark:bg-green-800/30 rounded p-2">
+              <strong>Idade:</strong> {dadosCorporais?.idade || 0} anos
+            </div>
           </div>
         </div>
       </div>
-
-      {errorAnalise && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-          <div className="flex items-center">
-            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mr-2" />
-            <span className="text-sm text-red-700 dark:text-red-300">{errorAnalise}</span>
-          </div>
-        </div>
-      )}
-
-      <AnaliseCorpoMediaPipe
-        fotoLateralUrl={fotos!.foto_lateral_direita_url!}
-        fotoAberturaUrl={fotos!.foto_abertura_url!}
-        alturaReal={dadosCorporais!.altura}
-        peso={dadosCorporais!.peso}
-        sexo={dadosCorporais!.sexo}
-        onMedidasExtraidas={handleMedidasExtraidas}
-        onError={handleError}
-      />
     </div>
   );
 };

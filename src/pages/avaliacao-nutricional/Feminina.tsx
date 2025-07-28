@@ -373,6 +373,8 @@ export function AvaliacaoNutricionalFeminina() {
           setFormData({
             ...formData,
             ...avaliacao,
+            // Converter data de volta para formato brasileiro para exibição
+            data_nascimento: converterDataParaBrasileiro(avaliacao.data_nascimento),
             // Garante que os campos de controle da interface estejam corretos
             doencas_ginecologicas: avaliacao.doencas_ginecologicas?.split(',') || [],
             historico_familiar_ginecologico: avaliacao.historico_familiar_ginecologico?.split(',') || [],
@@ -486,10 +488,42 @@ export function AvaliacaoNutricionalFeminina() {
     }));
   };
 
+  // Função para converter data DD/MM/YYYY para YYYY-MM-DD (formato ISO)
+  const converterDataParaISO = (dataBrasileira: string): string => {
+    if (!dataBrasileira || dataBrasileira.length !== 10) {
+      throw new Error('Data inválida. Use o formato DD/MM/YYYY');
+    }
+    
+    const [dia, mes, ano] = dataBrasileira.split('/');
+    
+    if (!dia || !mes || !ano || ano.length !== 4) {
+      throw new Error('Data inválida. Use o formato DD/MM/YYYY');
+    }
+    
+    const dataISO = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+    
+    // Validar se a data é válida
+    const dataValidacao = new Date(dataISO);
+    if (isNaN(dataValidacao.getTime())) {
+      throw new Error('Data inválida');
+    }
+    
+    return dataISO;
+  };
+
+  // Função para converter data ISO (YYYY-MM-DD) para formato brasileiro (DD/MM/YYYY)
+  const converterDataParaBrasileiro = (dataISO: string): string => {
+    if (!dataISO) return '';
+    
+    const [ano, mes, dia] = dataISO.split('-');
+    return `${dia}/${mes}/${ano}`;
+  };
+
   // Função para calcular idade
   const calcularIdade = (dataNascimento: string): number => {
+    const dataISO = converterDataParaISO(dataNascimento);
     const hoje = new Date();
-    const nascimento = new Date(dataNascimento);
+    const nascimento = new Date(dataISO);
     let idade = hoje.getFullYear() - nascimento.getFullYear();
     const m = hoje.getMonth() - nascimento.getMonth();
     if (m < 0 || (m === 0 && hoje.getDate() < nascimento.getDate())) {
@@ -514,6 +548,21 @@ export function AvaliacaoNutricionalFeminina() {
         // Validação dos dados pessoais
         if (!formData.data_nascimento) {
           errors.data_nascimento = "Data de nascimento é obrigatória";
+        } else {
+          try {
+            // Validar se a data está no formato correto e pode ser convertida
+            converterDataParaISO(formData.data_nascimento);
+            
+            // Validar se a pessoa tem pelo menos 16 anos e no máximo 100 anos
+            const idade = calcularIdade(formData.data_nascimento);
+            if (idade < 16) {
+              errors.data_nascimento = "Idade mínima é 16 anos";
+            } else if (idade > 100) {
+              errors.data_nascimento = "Idade máxima é 100 anos";
+            }
+          } catch (error) {
+            errors.data_nascimento = "Data inválida. Use o formato DD/MM/YYYY";
+          }
         }
         if (!formData.estado_civil) {
           errors.estado_civil = "Estado civil é obrigatório";
@@ -690,9 +739,13 @@ export function AvaliacaoNutricionalFeminina() {
       if (!user) throw new Error('Usuário não autenticado');
 
       const idade = calcularIdade(formData.data_nascimento);
+      
+      // Converter data para formato ISO antes do salvamento
+      const dataISO = converterDataParaISO(formData.data_nascimento);
 
       const dadosAvaliacao = {
         ...formData,
+        data_nascimento: dataISO, // Usar data convertida
         user_id: user.id,
         idade,
         status: 'PENDENTE',

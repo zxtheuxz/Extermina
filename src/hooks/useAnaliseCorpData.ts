@@ -34,6 +34,7 @@ interface AnaliseCorpData {
   loading: boolean;
   error: string | null;
   hasMedidasExistentes: boolean;
+  liberado: boolean;
 }
 
 export const useAnaliseCorpData = () => {
@@ -43,7 +44,8 @@ export const useAnaliseCorpData = () => {
     fotos: null,
     loading: true,
     error: null,
-    hasMedidasExistentes: false
+    hasMedidasExistentes: false,
+    liberado: false
   });
 
   const calcularIdade = (dataNascimento: string): number => {
@@ -112,24 +114,27 @@ export const useAnaliseCorpData = () => {
     }
   };
 
-  const buscarFotos = async (userId: string) => {
+  const buscarFotosELiberacao = async (userId: string) => {
     try {
       const { data: perfilData, error: perfilError } = await supabase
         .from('perfis')
-        .select('foto_lateral_direita_url, foto_abertura_url')
+        .select('foto_lateral_direita_url, foto_abertura_url, liberado')
         .eq('user_id', userId)
         .single();
 
       if (perfilError) {
-        throw new Error(`Erro ao buscar fotos do perfil: ${perfilError.message}`);
+        throw new Error(`Erro ao buscar dados do perfil: ${perfilError.message}`);
       }
 
       return {
-        foto_lateral_direita_url: perfilData?.foto_lateral_direita_url || null,
-        foto_abertura_url: perfilData?.foto_abertura_url || null
+        fotos: {
+          foto_lateral_direita_url: perfilData?.foto_lateral_direita_url || null,
+          foto_abertura_url: perfilData?.foto_abertura_url || null
+        },
+        liberado: perfilData?.liberado?.toLowerCase() === 'sim'
       };
     } catch (error) {
-      console.error('Erro ao buscar fotos:', error);
+      console.error('Erro ao buscar fotos e liberação:', error);
       throw error;
     }
   };
@@ -179,10 +184,10 @@ export const useAnaliseCorpData = () => {
       
       debugLog(`✅ Perfil encontrado - sexo: "${perfilData.sexo}"`);
 
-      // Buscar dados corporais, fotos e verificar medidas existentes em paralelo
-      const [dadosCorporais, fotos, hasMedidasExistentes] = await Promise.all([
+      // Buscar dados corporais, fotos+liberação e verificar medidas existentes em paralelo
+      const [dadosCorporais, { fotos, liberado }, hasMedidasExistentes] = await Promise.all([
         buscarDadosCorporais(user.id, perfilData.sexo),
-        buscarFotos(user.id),
+        buscarFotosELiberacao(user.id),
         verificarMedidasExistentes(user.id)
       ]);
 
@@ -191,7 +196,8 @@ export const useAnaliseCorpData = () => {
         fotos,
         loading: false,
         error: null,
-        hasMedidasExistentes
+        hasMedidasExistentes,
+        liberado
       });
 
     } catch (error) {

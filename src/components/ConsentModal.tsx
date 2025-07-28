@@ -252,12 +252,12 @@ export function ConsentModal({ isOpen, termType, onAccept, onReject, onClose }: 
   const termContent = TERMS_CONTENT[termType];
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className={`relative w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden ${
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-6 md:p-8">
+      <div className={`relative w-full max-w-4xl h-[85vh] sm:h-[85vh] md:h-[85vh] rounded-2xl shadow-2xl flex flex-col ${
         isDarkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
       }`}>
         {/* Header */}
-        <div className={`flex items-center justify-between p-6 border-b ${
+        <div className={`flex items-center justify-between p-6 border-b flex-shrink-0 ${
           isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'
         }`}>
           <div className="flex items-center space-x-3">
@@ -299,7 +299,6 @@ export function ConsentModal({ isOpen, termType, onAccept, onReject, onClose }: 
           className={`flex-1 overflow-y-auto p-6 prose prose-sm max-w-none ${
             isDarkMode ? 'prose-invert' : ''
           }`}
-          style={{ maxHeight: 'calc(90vh - 180px)' }}
           onScroll={handleScroll}
         >
           <div className={`${isDarkMode ? 'text-gray-300' : 'text-gray-700'} leading-relaxed`}>
@@ -384,13 +383,13 @@ export function ConsentModal({ isOpen, termType, onAccept, onReject, onClose }: 
         </div>
 
         {/* Footer */}
-        <div className={`p-6 border-t ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+        <div className={`p-6 border-t flex-shrink-0 ${isDarkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
           {!hasScrolledToBottom && (
-            <div className={`flex items-center justify-center mb-4 p-3 rounded-lg ${
+            <div className={`flex items-center justify-center mb-4 p-4 rounded-lg animate-pulse ${
               isDarkMode ? 'bg-yellow-900/30 text-yellow-400' : 'bg-yellow-50 text-yellow-700'
             }`}>
-              <AlertTriangle className="h-5 w-5 mr-2" />
-              <span className="text-sm font-medium">
+              <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0" />
+              <span className="text-sm font-medium text-center">
                 Role até o final do documento para habilitar os botões
               </span>
             </div>
