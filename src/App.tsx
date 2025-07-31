@@ -5,6 +5,7 @@ import { LoginStaff } from './pages/LoginStaff';
 import { Dashboard } from './pages/Dashboard';
 import { Dashboard as AdminDashboard } from './pages/admin/Dashboard';
 import { Dashboard as PreparadorDashboard } from './pages/preparador/Dashboard';
+import { Dashboard as NutricionistaDashboard } from './pages/nutricionista/Dashboard';
 import { AvaliacaoFisica } from './pages/AvaliacaoFisica';
 import { AvaliacaoNutricionalFeminina, AvaliacaoNutricionalMasculina } from './pages/avaliacao-nutricional';
 import { Resultados } from './pages/Resultados';
@@ -21,18 +22,20 @@ import { ProtectedFormRoute } from './routes/ProtectedFormRoute';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { ActivityLoggerProvider } from './providers/ActivityLoggerProvider';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles/global.css';
 
 // Logs de debug removidos para evitar poluição do console
 
 function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <ActivityLoggerProvider>
-          <BrowserRouter>
-            <div className="app-container">
-              <Routes>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <ActivityLoggerProvider>
+            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+              <div className="app-container">
+                <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/staff" element={<LoginStaff />} />
                 <Route path="/cadastro" element={<Cadastro />} />
@@ -40,6 +43,7 @@ function App() {
                 <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
                 <Route path="/admin/dashboard" element={<RoleBasedRoute allowedRoles={['admin']}><AdminDashboard /></RoleBasedRoute>} />
                 <Route path="/preparador/dashboard" element={<RoleBasedRoute allowedRoles={['preparador']}><PreparadorDashboard /></RoleBasedRoute>} />
+                <Route path="/nutricionista/dashboard" element={<RoleBasedRoute allowedRoles={['nutricionista']}><NutricionistaDashboard /></RoleBasedRoute>} />
                 <Route path="/avaliacao-fisica" element={<PrivateRoute><AvaliacaoFisica /></PrivateRoute>} />
                 <Route path="/avaliacao-nutricional/feminino" element={<ProtectedFormRoute component={AvaliacaoNutricionalFeminina} formType="nutricional" />} />
                 <Route path="/avaliacao-nutricional/masculino" element={<ProtectedFormRoute component={AvaliacaoNutricionalMasculina} formType="nutricional" />} />
@@ -56,6 +60,7 @@ function App() {
         </ActivityLoggerProvider>
       </AuthProvider>
     </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

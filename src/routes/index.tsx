@@ -11,15 +11,17 @@ import { ResultadoFisico } from '../pages/ResultadoFisico';
 import { PrivateRoute } from '../components/PrivateRoute';
 import { AdminRoute } from '../components/AdminRoute';
 import { PreparadorRoute } from '../components/PreparadorRoute';
+import { NutricionistaRoute } from '../components/NutricionistaRoute';
 import { ProtectedFormRoute } from './ProtectedFormRoute';
 import { MaintenancePage } from '../pages/MaintenancePage';
 import { Layout } from '../components/Layout';
 
-// Importar páginas de Admin e Preparador
+// Importar páginas de Admin, Preparador e Nutricionista
 import { AdminDashboard } from '../pages/admin/Dashboard';
 import { VisualizarUsuario } from '../pages/admin/VisualizarUsuario';
 import { PreparadorDashboard } from '../pages/preparador/Dashboard';
 import { AnalisarCliente } from '../pages/preparador/AnalisarCliente';
+import { NutricionistaDashboard } from '../pages/nutricionista/Dashboard';
 
 // Componente temporário para configurações
 const Configuracoes = () => <div>Página de Configurações</div>;
@@ -140,6 +142,16 @@ export function AppRoutes() {
           <PreparadorRoute>
             <AnalisarCliente />
           </PreparadorRoute>
+        } 
+      />
+      
+      {/* Rotas de Nutricionista */}
+      <Route 
+        path="/nutricionista/dashboard" 
+        element={
+          <NutricionistaRoute>
+            <NutricionistaDashboard />
+          </NutricionistaRoute>
         } 
       />
       

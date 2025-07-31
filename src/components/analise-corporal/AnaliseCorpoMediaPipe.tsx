@@ -84,7 +84,7 @@ const calcularFatorBiotipo = (imc: number, tipoMedida: keyof MedidasExtraidas): 
   return 1.15;
 };
 
-// ⚖️ SISTEMA DE PESOS HÍBRIDO v11.2 (AJUSTADO POR BIOTIPO)
+// ⚖️ SISTEMA DE PESOS HÍBRIDO v11.5 (AJUSTADO POR BIOTIPO)
 const obterPesosHibridos = (imc: number, tipoMedida: keyof MedidasExtraidas): { pesoVisual: number, pesoEstatistico: number } => {
     if (imc < 23) {
         // Ectomorfos: confie mais nas proporções estatísticas

@@ -1,6 +1,7 @@
 import React, { useEffect, createContext, useContext, useRef, useMemo } from 'react';
 import { useActivityLogger } from '../hooks/useActivityLogger';
 import { useAuth } from '../contexts/AuthContext';
+import { logger } from '../utils/logger';
 
 const ActivityLoggerContext = createContext<ReturnType<typeof useActivityLogger> | null>(null);
 
@@ -29,9 +30,7 @@ export function ActivityLoggerProvider({ children }: ActivityLoggerProviderProps
     if (isAuthenticated && user) {
       // Verificar se já logou para este usuário
       if (user.id !== lastUserId.current) {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('ActivityLogger: Novo usuário autenticado, registrando login');
-        }
+        logger.debug('Novo usuário autenticado, registrando login', { userId: user.id }, 'ActivityLogger');
         lastUserId.current = user.id;
         hasLoggedLogin.current = false;
       }
@@ -44,11 +43,9 @@ export function ActivityLoggerProvider({ children }: ActivityLoggerProviderProps
         setTimeout(async () => {
           try {
             await activityLogger.logLogin();
-            if (process.env.NODE_ENV === 'development') {
-              console.log('ActivityLogger: Login registrado com sucesso');
-            }
+            logger.info('Login registrado com sucesso', { userId: user.id }, 'ActivityLogger');
           } catch (error) {
-            console.error('Erro ao registrar login:', error);
+            logger.error('Erro ao registrar login', error, 'ActivityLogger');
             // Permitir nova tentativa em caso de erro
             hasLoggedLogin.current = false;
           }
@@ -69,14 +66,15 @@ export function ActivityLoggerProvider({ children }: ActivityLoggerProviderProps
       if (user && !event.defaultPrevented) {
         // Usar sendBeacon apenas se for um fechamento real
         try {
-          navigator.sendBeacon('/api/log-activity', JSON.stringify({
-            action: 'page_unload',
-            userId: user.id,
-            timestamp: new Date().toISOString()
-          }));
+          // TODO: Implementar endpoint /api/log-activity ou usar Supabase
+          // navigator.sendBeacon('/api/log-activity', JSON.stringify({
+          //   action: 'page_unload',
+          //   userId: user.id,
+          //   timestamp: new Date().toISOString()
+          // }));
           
           if (process.env.NODE_ENV === 'development') {
-            console.log('ActivityLogger: Registrando saída da aplicação');
+            console.log('ActivityLogger: Saída da aplicação detectada (sendBeacon desabilitado)');
           }
         } catch (error) {
           // Silenciosamente ignorar erros de sendBeacon

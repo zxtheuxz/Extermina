@@ -120,8 +120,8 @@ export function LoginStaff() {
         return;
       }
 
-      // PERMITIR apenas admin e preparador
-      if (userRole !== 'admin' && userRole !== 'preparador') {
+      // PERMITIR apenas admin, preparador e nutricionista
+      if (userRole !== 'admin' && userRole !== 'preparador' && userRole !== 'nutricionista') {
         setErro('Role de usuário não autorizado para esta área.');
         return;
       }
@@ -137,12 +137,25 @@ export function LoginStaff() {
       }
 
       if (user) {
-        // Aguardar um pouco para o AuthContext processar
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Redirecionar baseado no role local (não dependendo do AuthContext que pode estar desatualizado)
+        let targetRoute = '/dashboard';
         
-        // Redirecionar baseado no role
-        const defaultRoute = userRole === 'admin' ? '/admin/dashboard' : '/preparador/dashboard';
-        navigate(defaultRoute);
+        switch (userRole) {
+          case 'admin':
+            targetRoute = '/admin/dashboard';
+            break;
+          case 'preparador':
+            targetRoute = '/preparador/dashboard';
+            break;
+          case 'nutricionista':
+            targetRoute = '/nutricionista/dashboard';
+            break;
+          default:
+            targetRoute = '/dashboard';
+        }
+        
+        console.log('LoginStaff: Redirecionando para:', targetRoute, 'userRole:', userRole);
+        navigate(targetRoute);
       }
     } catch (error) {
       console.error('LoginStaff: Erro inesperado:', error);

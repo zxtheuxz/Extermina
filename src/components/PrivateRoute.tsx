@@ -36,13 +36,13 @@ function PrivateRouteComponent({ children }: { children: React.ReactNode }) {
 
   // Separar timeout em useEffect próprio para evitar re-mount
   useEffect(() => {
-    // Proteção anti-loop: timeout de 5 segundos para loading (otimizado)
+    // Proteção anti-loop: timeout de 8 segundos para loading (padronizado com RoleBasedRoute)
     if (loading && !hasTimedOut.current) {
       loadingTimeoutRef.current = setTimeout(() => {
         hasTimedOut.current = true;
         // Forçar redirecionamento para login após timeout
         window.location.href = '/login';
-      }, 5000);
+      }, 8000);
     }
 
     return () => {

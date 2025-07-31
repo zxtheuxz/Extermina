@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface RoleBasedRouteProps {
@@ -14,44 +14,23 @@ export function RoleBasedRoute({
   redirectTo = '/dashboard' 
 }: RoleBasedRouteProps) {
   const { isAuthenticated, loading, profileLoading, hasRole, userProfile } = useAuth();
-  
-  // Proteção anti-loop: timeout máximo para loading
+  const [hasTimedOut, setHasTimedOut] = useState(false);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const hasTimedOut = useRef(false);
 
-  // Para roles críticos (admin/preparador), identificar se é um caso especial
-  const isCriticalRole = allowedRoles.some(role => ['admin', 'preparador'].includes(role));
+  // Para roles críticos (admin/preparador/nutricionista), identificar se é um caso especial
+  const isCriticalRole = allowedRoles.some(role => ['admin', 'preparador', 'nutricionista'].includes(role));
 
-  // Configurar timeout para loading apenas uma vez na montagem
+  // Timeout otimizado para loading
   useEffect(() => {
-    return () => {
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-    };
-  }, []); // Executar apenas uma vez na montagem
-
-  // Configurar timeout em useEffect próprio para evitar re-mount
-  useEffect(() => {
-    // Proteção anti-loop: timeout de 8 segundos para loading (maior que PrivateRoute devido à complexidade)
-    if ((loading || profileLoading) && !hasTimedOut.current) {
+    if (loading || profileLoading) {
       loadingTimeoutRef.current = setTimeout(() => {
-        hasTimedOut.current = true;
-        
-        // Para roles críticos, tentar redirecionar para área apropriada
-        if (isCriticalRole && isAuthenticated) {
-          window.location.href = userProfile?.role === 'admin' ? '/admin/dashboard' : '/preparador/dashboard';
-        } else {
-          // Fallback para área normal
-          window.location.href = '/dashboard';
-        }
-      }, 8000);
-    }
-
-    // Limpar timeout quando loading termina
-    if (!loading && !profileLoading && loadingTimeoutRef.current) {
-      clearTimeout(loadingTimeoutRef.current);
-      hasTimedOut.current = false;
+        setHasTimedOut(true);
+      }, 5000); // Reduzido para 5 segundos
+    } else {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+      setHasTimedOut(false);
     }
 
     return () => {
@@ -59,10 +38,10 @@ export function RoleBasedRoute({
         clearTimeout(loadingTimeoutRef.current);
       }
     };
-  }, [loading, profileLoading, isAuthenticated, userProfile, isCriticalRole]);
+  }, [loading, profileLoading]);
 
   // Aguardar tanto o carregamento da sessão quanto do perfil
-  if ((loading || profileLoading) && !hasTimedOut.current) {
+  if ((loading || profileLoading) && !hasTimedOut) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{background: 'linear-gradient(135deg, #f5f7ff 0%, #e0e6ff 100%)'}}>
         <div className="text-center">
@@ -81,14 +60,26 @@ export function RoleBasedRoute({
     return <Navigate to="/login" />;
   }
 
+  // Se tiver dado timeout, redirecionar baseado no contexto
+  if (hasTimedOut) {
+    if (isCriticalRole && userProfile?.role) {
+      const roleRoute = userProfile.role === 'admin' ? '/admin/dashboard' : 
+                       userProfile.role === 'preparador' ? '/preparador/dashboard' :
+                       userProfile.role === 'nutricionista' ? '/nutricionista/dashboard' : 
+                       '/dashboard';
+      return <Navigate to={roleRoute} replace />;
+    }
+    return <Navigate to="/dashboard" replace />;
+  }
+
   // Verificar se o perfil foi carregado completamente
   if (!userProfile) {
-    return <Navigate to="/dashboard" />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   const userHasAccess = hasRole(allowedRoles);
   if (!userHasAccess) {
-    return <Navigate to={redirectTo} />;
+    return <Navigate to={redirectTo} replace />;
   }
 
   return <>{children}</>;

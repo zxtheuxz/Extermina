@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { Target, Users, FileCheck, TrendingUp, Clock, BarChart3, AlertCircle, CheckCircle, Activity, Calendar, LogOut } from 'lucide-react';
+import { Target, Users, FileCheck, TrendingUp, Clock, BarChart3, AlertCircle, CheckCircle, Activity, Calendar, LogOut, Pill, Dumbbell } from 'lucide-react';
 import { AnalisesQueue } from '../../components/AnalisesQueue';
+import { AvaliacoesFisicasQueue } from '../../components/preparador/AvaliacoesFisicasQueue';
 
 interface Perfil {
   nome_completo?: string;
@@ -15,9 +16,11 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
+  const [activeTab, setActiveTab] = useState<'medicamentos' | 'fisicas'>('fisicas');
   const [stats, setStats] = useState({
     clientesAtivos: 0,
     avaliacoesPendentes: 0,
+    avaliacoesFisicasPendentes: 0,
     programacoesHoje: 0,
     taxaSucesso: 0
   });
@@ -32,36 +35,53 @@ export function Dashboard() {
         setUser(user);
         
         if (user) {
-          // Buscar perfil do preparador
-          const { data: perfilData } = await supabase
-            .from('perfis')
-            .select('nome_completo, role')
-            .eq('user_id', user.id)
-            .single();
+          // Buscar todas as informações em paralelo com Promise.allSettled
+          const results = await Promise.allSettled([
+            // Perfil do preparador
+            supabase
+              .from('perfis')
+              .select('nome_completo, role')
+              .eq('user_id', user.id)
+              .single(),
+            
+            // Clientes ativos
+            supabase
+              .from('perfis')
+              .select('*', { count: 'exact', head: true })
+              .eq('role', 'cliente')
+              .eq('liberado', 'sim'),
+            
+            // Avaliações médicas pendentes
+            supabase
+              .from('analises_medicamentos')
+              .select('*', { count: 'exact', head: true })
+              .eq('status', 'PENDENTE'),
+            
+            // Avaliações físicas pendentes
+            supabase
+              .from('aprovacoes_fisicas')
+              .select('*', { count: 'exact', head: true })
+              .eq('status', 'PENDENTE'),
+            
+            // Programações de hoje
+            supabase
+              .from('avaliacao_fisica')
+              .select('*', { count: 'exact', head: true })
+              .gte('created_at', new Date().toISOString().split('T')[0])
+          ]);
           
-          setPerfil(perfilData);
+          // Processar resultados com tratamento de erros individual
+          const [perfilResult, clientesResult, avaliacoesResult, fisicasResult, programacoesResult] = results;
           
-          // Buscar estatísticas dos clientes
-          const { count: clientesAtivos } = await supabase
-            .from('perfis')
-            .select('*', { count: 'exact', head: true })
-            .eq('role', 'cliente')
-            .eq('liberado', 'sim');
-          
-          const { count: avaliacoesPendentes } = await supabase
-            .from('analises_medicamentos')
-            .select('*', { count: 'exact', head: true })
-            .eq('status', 'PENDENTE');
-          
-          const { count: programacoesHoje } = await supabase
-            .from('avaliacao_fisica')
-            .select('*', { count: 'exact', head: true })
-            .gte('created_at', new Date().toISOString().split('T')[0]);
+          if (perfilResult.status === 'fulfilled' && perfilResult.value.data) {
+            setPerfil(perfilResult.value.data);
+          }
           
           setStats({
-            clientesAtivos: clientesAtivos || 0,
-            avaliacoesPendentes: avaliacoesPendentes || 0,
-            programacoesHoje: programacoesHoje || 0,
+            clientesAtivos: clientesResult.status === 'fulfilled' ? (clientesResult.value.count || 0) : 0,
+            avaliacoesPendentes: avaliacoesResult.status === 'fulfilled' ? (avaliacoesResult.value.count || 0) : 0,
+            avaliacoesFisicasPendentes: fisicasResult.status === 'fulfilled' ? (fisicasResult.value.count || 0) : 0,
+            programacoesHoje: programacoesResult.status === 'fulfilled' ? (programacoesResult.value.count || 0) : 0,
             taxaSucesso: 92 // Valor fixo para demonstração
           });
         }
@@ -168,14 +188,28 @@ export function Dashboard() {
             <div className="bg-white rounded-xl shadow-sm border border-orange-200 p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-600">Análises Pendentes</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.avaliacoesPendentes}</p>
+                  <p className="text-sm font-medium text-slate-600">Avaliações Físicas Pendentes</p>
+                  <p className="text-3xl font-bold text-slate-900">{stats.avaliacoesFisicasPendentes}</p>
                 </div>
-                <AlertCircle className="w-8 h-8 text-orange-600" />
+                <Dumbbell className="w-8 h-8 text-orange-600" />
               </div>
               <div className="mt-4 flex items-center">
                 <Clock className="w-4 h-4 text-orange-500 mr-1" />
-                <span className="text-sm text-orange-600">Requer atenção</span>
+                <span className="text-sm text-orange-600">Aguardando aprovação</span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-purple-200 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-600">Análises Médicas Pendentes</p>
+                  <p className="text-3xl font-bold text-slate-900">{stats.avaliacoesPendentes}</p>
+                </div>
+                <Pill className="w-8 h-8 text-purple-600" />
+              </div>
+              <div className="mt-4 flex items-center">
+                <AlertCircle className="w-4 h-4 text-purple-500 mr-1" />
+                <span className="text-sm text-purple-600">Documentos médicos</span>
               </div>
             </div>
 
@@ -193,13 +227,13 @@ export function Dashboard() {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-purple-200 p-6">
+            <div className="bg-white rounded-xl shadow-sm border border-teal-200 p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-600">Taxa de Sucesso</p>
                   <p className="text-3xl font-bold text-slate-900">{stats.taxaSucesso}%</p>
                 </div>
-                <BarChart3 className="w-8 h-8 text-purple-600" />
+                <BarChart3 className="w-8 h-8 text-teal-600" />
               </div>
               <div className="mt-4 flex items-center">
                 <CheckCircle className="w-4 h-4 text-green-500 mr-1" />
@@ -208,9 +242,57 @@ export function Dashboard() {
             </div>
           </div>
 
+          {/* Tabs Navigation */}
+          <div className="mb-6">
+            <div className="border-b border-gray-200">
+              <nav className="-mb-px flex space-x-8">
+                <button
+                  onClick={() => setActiveTab('fisicas')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    activeTab === 'fisicas'
+                      ? 'border-green-500 text-green-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Dumbbell className="w-4 h-4" />
+                    Avaliações Físicas
+                    {stats.avaliacoesFisicasPendentes > 0 && (
+                      <span className="ml-2 bg-orange-100 text-orange-600 text-xs font-medium px-2 py-0.5 rounded-full">
+                        {stats.avaliacoesFisicasPendentes}
+                      </span>
+                    )}
+                  </div>
+                </button>
+                <button
+                  onClick={() => setActiveTab('medicamentos')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    activeTab === 'medicamentos'
+                      ? 'border-green-500 text-green-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Pill className="w-4 h-4" />
+                    Análises Médicas
+                    {stats.avaliacoesPendentes > 0 && (
+                      <span className="ml-2 bg-purple-100 text-purple-600 text-xs font-medium px-2 py-0.5 rounded-full">
+                        {stats.avaliacoesPendentes}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              </nav>
+            </div>
+          </div>
+
           {/* Main Content */}
           <div className="w-full">
-            <AnalisesQueue />
+            {activeTab === 'fisicas' ? (
+              <AvaliacoesFisicasQueue />
+            ) : (
+              <AnalisesQueue />
+            )}
           </div>
 
         </div>

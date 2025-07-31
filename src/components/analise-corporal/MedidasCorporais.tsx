@@ -9,69 +9,62 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Camera, AlertTriangle, Loader2, Clock } from 'lucide-react';
 
+// Estado unificado para análise
+type AnaliseStatus = 'loading' | 'ready' | 'analyzing' | 'calculating' | 'finalizing' | 'complete' | 'error';
+
 const MedidasCorporais: React.FC = () => {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
   const { dadosCorporais, fotos, loading, error, hasMedidasExistentes, liberado, refetch } = useAnaliseCorpData();
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisStep, setAnalysisStep] = useState<'calculating' | 'finalizing'>('calculating');
+  
+  // Estados simplificados
+  const [status, setStatus] = useState<AnaliseStatus>('loading');
   const [resultadoAnalise, setResultadoAnalise] = useState<ResultadoAnalise | null>(null);
   const [errorAnalise, setErrorAnalise] = useState<string | null>(null);
-  
-  // Estado unificado para controlar quando a página está 100% pronta
-  const [pageReady, setPageReady] = useState(false);
-  const [loadingStep, setLoadingStep] = useState('profile');
-  const [analiseAutomatica, setAnaliseAutomatica] = useState(false);
   const [mostrarMediaPipe, setMostrarMediaPipe] = useState(false);
 
-  // Controlar loading unificado - AGUARDA TUDO ESTAR PRONTO
+  // Lógica de estado unificada
   useEffect(() => {
-    const checkPageReady = () => {
-      // SEMPRE mostrar loading se:
-      // 1. Ainda está carregando dados básicos
-      // 2. Está analisando nova medida
-      // 3. Dados não estão completamente definidos
-      if (loading || isAnalyzing) {
-        setPageReady(false);
-        return;
-      }
-
-      // Aguardar mais um pouco para garantir que tudo carregou
-      setTimeout(() => {
-        setPageReady(true);
-      }, 1000);
-    };
-
-    checkPageReady();
-  }, [loading, isAnalyzing]);
-
-  // Verificar se pode fazer análise automática
-  useEffect(() => {
-    const podeAnalisar = () => {
-      // Só verifica se já carregou tudo e não tem erro
-      if (loading || error || isAnalyzing || pageReady === false) return false;
-      
-      // Se já tem medidas existentes, não precisa analisar
-      if (hasMedidasExistentes) return false;
-      
-      // Se já tem resultado da análise atual, não precisa analisar
-      if (resultadoAnalise) return false;
-      
-      // Verificar se tem os dados necessários
-      const temDadosCorporais = dadosCorporais !== null;
-      const temFotosNecessarias = fotos?.foto_lateral_direita_url && fotos?.foto_abertura_url;
-      const estaLiberado = liberado === true;
-      
-      return temDadosCorporais && temFotosNecessarias && estaLiberado;
-    };
-
-    if (podeAnalisar() && !analiseAutomatica) {
-      console.log('🚀 Iniciando análise automática com MediaPipe v11.2...');
-      setAnaliseAutomatica(true);
-      setMostrarMediaPipe(true);
+    // Sempre priorizar carregamento inicial
+    if (loading) {
+      setStatus('loading');
+      return;
     }
-  }, [loading, error, isAnalyzing, pageReady, hasMedidasExistentes, resultadoAnalise, dadosCorporais, fotos, liberado, analiseAutomatica]);
+
+    // Se tem erro, mostrar erro
+    if (error) {
+      setStatus('error');
+      return;
+    }
+
+    // Se já tem resultado atual, está completo
+    if (resultadoAnalise) {
+      setStatus('complete');
+      return;
+    }
+
+    // Se tem medidas existentes, está completo
+    if (hasMedidasExistentes) {
+      setStatus('complete');
+      return;
+    }
+
+    // Verificar se pode iniciar análise automática
+    const temDadosCorporais = dadosCorporais !== null;
+    const temFotosNecessarias = fotos?.foto_lateral_direita_url && fotos?.foto_abertura_url;
+    const estaLiberado = liberado === true;
+    
+    if (temDadosCorporais && temFotosNecessarias && estaLiberado) {
+      if (!mostrarMediaPipe && status !== 'analyzing') {
+        console.log('🚀 Iniciando análise automática com MediaPipe v11.5...');
+        setMostrarMediaPipe(true);
+        setStatus('ready');
+      }
+    } else {
+      setStatus('ready');
+    }
+  }, [loading, error, hasMedidasExistentes, resultadoAnalise, dadosCorporais, fotos, liberado, mostrarMediaPipe, status]);
 
   // Limites fisiológicos realistas para validação (expandidos para biotipos diversos)
   const LIMITES_MEDIDAS = {
@@ -219,8 +212,7 @@ const MedidasCorporais: React.FC = () => {
       return;
     }
 
-    setIsAnalyzing(true);
-    setAnalysisStep('calculating');
+    setStatus('calculating');
     setErrorAnalise(null);
 
     try {
@@ -228,13 +220,14 @@ const MedidasCorporais: React.FC = () => {
       const resultado = analisarComposicaoCorporal(medidas, dadosCorporais);
       
       // Mudança para etapa de finalização
-      setAnalysisStep('finalizing');
+      setStatus('finalizing');
       
       // Salvar no Supabase
       await salvarResultadosNoSupabase(resultado);
       
       // Atualizar estado
       setResultadoAnalise(resultado);
+      setStatus('complete');
       
       // Atualizar dados (para mostrar que agora tem medidas)
       refetch();
@@ -242,24 +235,23 @@ const MedidasCorporais: React.FC = () => {
     } catch (error) {
       console.error('Erro durante análise:', error);
       setErrorAnalise(error instanceof Error ? error.message : 'Erro durante análise');
-    } finally {
-      setIsAnalyzing(false);
+      setStatus('error');
     }
   };
 
   const handleError = (error: string) => {
     setErrorAnalise(error);
-    setIsAnalyzing(false);
+    setStatus('error');
   };
 
-  // LOADING UNIFICADO: Mostrar loading até tudo estar pronto
-  if (!pageReady) {
-    const currentStep = isAnalyzing ? analysisStep : 'loading_results';
-    return <LoadingAnalise step={currentStep as any} isDarkMode={isDarkMode} />;
+  // LOADING UNIFICADO: Mostrar loading baseado no status
+  if (status === 'loading' || status === 'calculating' || status === 'finalizing') {
+    const step = status === 'calculating' ? 'calculating' : status === 'finalizing' ? 'finalizing' : 'loading_results';
+    return <LoadingAnalise step={step as any} isDarkMode={isDarkMode} />;
   }
 
-  // ERRO: Se tem erro, mostrar
-  if (error) {
+  // ERRO: Se tem erro ou erro de análise, mostrar
+  if (status === 'error' || error) {
     return (
       <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
         <div className="flex items-center">
@@ -269,7 +261,7 @@ const MedidasCorporais: React.FC = () => {
               Erro ao carregar dados
             </h3>
             <p className="text-sm text-red-700 dark:text-red-300 mt-1">
-              {error}
+              {error || errorAnalise}
             </p>
           </div>
         </div>
@@ -277,14 +269,14 @@ const MedidasCorporais: React.FC = () => {
     );
   }
 
-  // PRIORIDADE 1: Se tem análise atual, mostrar
-  if (resultadoAnalise) {
-    return <ResultadosAnalise resultado={resultadoAnalise} />;
-  }
-
-  // PRIORIDADE 2: Se tem análise salva, mostrar
-  if (hasMedidasExistentes) {
-    return <ResultadosAnalise />;
+  // Se status é complete, mostrar resultados
+  if (status === 'complete') {
+    if (resultadoAnalise) {
+      return <ResultadosAnalise resultado={resultadoAnalise} />;
+    }
+    if (hasMedidasExistentes) {
+      return <ResultadosAnalise />;
+    }
   }
 
   // PRIORIDADE 3: Verificar condições para análise
@@ -352,7 +344,7 @@ const MedidasCorporais: React.FC = () => {
         onMedidasExtraidas={handleMedidasExtraidas}
         onError={(error) => {
           console.error('Erro no MediaPipe:', error);
-          setErrorAnalise(error);
+          handleError(error);
           setMostrarMediaPipe(false);
         }}
       />
@@ -360,9 +352,8 @@ const MedidasCorporais: React.FC = () => {
   }
   
   // Se está analisando mas não mostrando MediaPipe, mostra loading
-  if (isAnalyzing) {
-    const currentStep = analysisStep;
-    return <LoadingAnalise step={currentStep as any} isDarkMode={isDarkMode} />;
+  if (status === 'analyzing') {
+    return <LoadingAnalise step="calculating" isDarkMode={isDarkMode} />;
   }
 
   // Fallback: caso não tenha iniciado a análise automática ainda

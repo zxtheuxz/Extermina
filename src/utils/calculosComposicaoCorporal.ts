@@ -198,7 +198,7 @@ export const classificarRazaoCinturaQuadril = (razao: number, sexo: 'M' | 'F'): 
  * Classifica índice de conicidade baseado nas faixas padronizadas
  */
 export const classificarIndiceConicidade = (indice: number): ClassificacaoRisco => {
-  if (indice <= 1.25) {
+  if (indice < 1.25) {
     return {
       valor: indice,
       faixa: 'ADEQUADO',
@@ -217,11 +217,13 @@ export const classificarIndiceConicidade = (indice: number): ClassificacaoRisco 
  * Classifica índice de massa magra baseado nas faixas padronizadas
  */
 export const classificarIndiceMassaMagra = (imm: number, sexo: 'M' | 'F'): ClassificacaoRisco => {
-  // Conforme documento: Baixo ≤ 17,8 | Adequado 17,8 - 22,3 | Alto > 22,3 kg/m²
+  // Baixo ≤ 17,8 | Adequado 17,8 - 22,3 | Alto > 22,3 kg/m²
+  // IMPORTANTE: IMM alto é BOM (mais massa magra = melhor saúde)
+  
   if (imm <= 17.8) {
     return {
       valor: imm,
-      faixa: 'BAIXO_RISCO',
+      faixa: 'BAIXO_RISCO', // Ruim - pouca massa magra
       descricao: 'Baixo'
     };
   } else if (imm <= 22.3) {
@@ -233,8 +235,8 @@ export const classificarIndiceMassaMagra = (imm: number, sexo: 'M' | 'F'): Class
   } else {
     return {
       valor: imm,
-      faixa: 'ALTO_RISCO',
-      descricao: 'Alto'
+      faixa: 'ADEQUADO', // Mudado de ALTO_RISCO para ADEQUADO - alta massa magra é boa!
+      descricao: 'Alto (Ótimo)' // Deixar claro que alto é bom
     };
   }
 };
@@ -353,48 +355,83 @@ export const calcularComposicaoCorporal = (
 
 /**
  * Calcula Índice Grimaldi (Shaped Score) baseado em todos os indicadores (0-100)
- * Ajustado para ser menos rigoroso e alinhado com valores do Shaped
+ * Reformulado para ser MUITO mais rigoroso e realista
  */
 export const calcularShapedScore = (indices: Omit<IndicesRisco, 'indiceGrimaldi'>): number => {
   let pontuacao = 0;
-  let totalIndicadores = 6;
+  let indicadoresRuins = 0;
+  let indicadoresBons = 0;
+  const totalIndicadores = 6;
 
-  // Cada indicador vale até ~16.67 pontos (100/6)
+  // Cada indicador vale até ~16.67 pontos base
   const pontosPorIndicador = 100 / totalIndicadores;
 
-  // Índice de massa gorda - menos rigoroso
-  if (indices.indiceMassaGorda.faixa === 'BAIXO_RISCO') pontuacao += pontosPorIndicador;
-  else if (indices.indiceMassaGorda.faixa === 'ADEQUADO') pontuacao += pontosPorIndicador * 0.85;
-  else if (indices.indiceMassaGorda.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.6;
-  else pontuacao += pontosPorIndicador * 0.3;
+  // Função para pontuar cada indicador de forma MUITO mais rigorosa
+  const pontuar = (faixa: string): number => {
+    switch (faixa) {
+      case 'ADEQUADO':
+      case 'BAIXO_RISCO':
+        indicadoresBons++;
+        return pontosPorIndicador; // Pontos completos apenas para indicadores bons
+      case 'MODERADO':
+      case 'ATENCAO':
+        indicadoresRuins++;
+        return pontosPorIndicador * 0.25; // MUITO reduzido: de 0.45 para 0.25
+      case 'ALTO_RISCO':
+      case 'INADEQUADO':
+        indicadoresRuins++;
+        return pontosPorIndicador * 0.05; // MUITO reduzido: de 0.20 para 0.05
+      default:
+        indicadoresRuins++;
+        return 0; // Zero pontos para casos extremos
+    }
+  };
 
-  // Índice de massa magra - menos rigoroso
-  if (indices.indiceMassaMagra.faixa === 'ADEQUADO') pontuacao += pontosPorIndicador;
-  else if (indices.indiceMassaMagra.faixa === 'BAIXO_RISCO') pontuacao += pontosPorIndicador * 0.7;
-  else pontuacao += pontosPorIndicador * 0.4;
+  // Aplicar pontuação rigorosa para cada indicador
+  pontuacao += pontuar(indices.indiceMassaGorda.faixa);
+  pontuacao += pontuar(indices.indiceMassaMagra.faixa);
+  pontuacao += pontuar(indices.razaoCinturaQuadril.faixa);
+  pontuacao += pontuar(indices.razaoCinturaEstatura.faixa);
+  pontuacao += pontuar(indices.indiceConicidade.faixa);
+  pontuacao += pontuar(indices.cintura.faixa);
 
-  // Razão cintura/quadril - menos rigoroso
-  if (indices.razaoCinturaQuadril.faixa === 'ADEQUADO') pontuacao += pontosPorIndicador;
-  else pontuacao += pontosPorIndicador * 0.5;
+  // Penalizações SEVERAS por múltiplos indicadores ruins
+  if (indicadoresRuins >= 2) {
+    pontuacao *= 0.75; // -25% se 2+ indicadores ruins
+  }
+  if (indicadoresRuins >= 3) {
+    pontuacao *= 0.65; // -35% adicional se 3+ indicadores ruins (total -52%)
+  }
+  if (indicadoresRuins >= 4) {
+    pontuacao *= 0.55; // -45% adicional se 4+ indicadores ruins (total -71%)
+  }
+  if (indicadoresRuins >= 5) {
+    pontuacao *= 0.40; // -60% adicional se 5+ indicadores ruins (total -84%)
+  }
 
-  // Razão cintura/estatura - menos rigoroso
-  if (indices.razaoCinturaEstatura.faixa === 'BAIXO_RISCO') pontuacao += pontosPorIndicador;
-  else if (indices.razaoCinturaEstatura.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.65;
-  else pontuacao += pontosPorIndicador * 0.3;
+  // Bônus MUITO reduzido - baseado apenas em indicadores bons
+  let bonusBase = 0;
+  if (indicadoresBons >= 5) {
+    bonusBase = 8; // Bônus pequeno apenas se quase todos forem bons
+  } else if (indicadoresBons >= 4) {
+    bonusBase = 5;
+  } else if (indicadoresBons >= 3) {
+    bonusBase = 2;
+  }
+  // Sem bônus se menos de 3 indicadores bons
+  
+  pontuacao += bonusBase;
 
-  // Índice de conicidade - menos rigoroso
-  if (indices.indiceConicidade.faixa === 'ADEQUADO') pontuacao += pontosPorIndicador;
-  else pontuacao += pontosPorIndicador * 0.5;
+  // Curva de distribuição MUITO mais restritiva
+  // Valores acima de 75 são extremamente difíceis de alcançar
+  if (pontuacao > 75) {
+    pontuacao = 75 + (pontuacao - 75) * 0.15; // Compressão muito maior
+  }
+  if (pontuacao > 85) {
+    pontuacao = 85 + (pontuacao - 85) * 0.05; // Quase impossível passar de 85
+  }
 
-  // Cintura - menos rigoroso
-  if (indices.cintura.faixa === 'BAIXO_RISCO') pontuacao += pontosPorIndicador;
-  else if (indices.cintura.faixa === 'MODERADO') pontuacao += pontosPorIndicador * 0.65;
-  else pontuacao += pontosPorIndicador * 0.3;
-
-  // Adicionar bônus base de 20 pontos para garantir valores mínimos mais altos
-  pontuacao += 20;
-
-  return Math.round(Math.max(0, Math.min(100, pontuacao)));
+  return Math.round(Math.max(15, Math.min(100, pontuacao))); // Mínimo de 15, máximo de 100
 };
 
 /**
@@ -527,12 +564,14 @@ export const interpretarResultados = (resultado: ResultadoAnalise): {
   // Interpretação da massa magra
   const massaMagraInterpretacao = indices.indiceMassaMagra.descricao;
   
-  // Interpretação do Shaped Score
+  // Interpretação MUITO mais rigorosa do Índice Grimaldi
   let indiceGrimaldiInterpretacao: string;
-  if (indices.indiceGrimaldi >= 80) indiceGrimaldiInterpretacao = 'Excelente';
-  else if (indices.indiceGrimaldi >= 60) indiceGrimaldiInterpretacao = 'Bom';
-  else if (indices.indiceGrimaldi >= 40) indiceGrimaldiInterpretacao = 'Regular';
-  else indiceGrimaldiInterpretacao = 'Necessita atenção';
+  if (indices.indiceGrimaldi >= 80) indiceGrimaldiInterpretacao = 'Excepcional'; // Apenas atletas de elite (1-2%)
+  else if (indices.indiceGrimaldi >= 70) indiceGrimaldiInterpretacao = 'Excelente'; // Pessoas em ótima forma (5-8%)
+  else if (indices.indiceGrimaldi >= 60) indiceGrimaldiInterpretacao = 'Bom'; // Boa forma física (15%)
+  else if (indices.indiceGrimaldi >= 45) indiceGrimaldiInterpretacao = 'Regular'; // Média populacional (40%)
+  else if (indices.indiceGrimaldi >= 30) indiceGrimaldiInterpretacao = 'Abaixo da média'; // (25%)
+  else indiceGrimaldiInterpretacao = 'Necessita atenção urgente'; // (7-10%)
   
   return {
     imc: imcInterpretacao,

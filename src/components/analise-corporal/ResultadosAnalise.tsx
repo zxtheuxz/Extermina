@@ -4,8 +4,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { 
   ResultadoAnalise, 
-  interpretarResultados, 
-  classificarPercentualGordura,
+  interpretarResultados,
+  classificarQuadril,
+  classificarCintura,
   classificarIndiceMassaMagra,
   classificarIndiceMassaGorda,
   classificarRazaoCinturaQuadril,
@@ -14,8 +15,13 @@ import {
 } from '../../utils/calculosComposicaoCorporal';
 import { Activity, TrendingUp, Scale, Zap, AlertCircle, Calendar, Target, Heart, Ruler } from 'lucide-react';
 import EscalaRisco from './EscalaRisco';
+import EscalaRiscoLimpa from './EscalaRiscoLimpa';
+import LegendaCores from './LegendaCores';
 import GraficoPizzaComposicao from './GraficoPizzaComposicao';
 import AvatarMedidas from './AvatarMedidas';
+import GraficoDispersao from './GraficoDispersao';
+import GridIndicadores from './GridIndicadores';
+import TabelaReferencias from './TabelaReferencias';
 import LoadingAnalise from './LoadingAnalise';
 
 interface ResultadosAnaliseProps {
@@ -104,22 +110,19 @@ const ResultadosAnalise: React.FC<ResultadosAnaliseProps> = ({ resultado }) => {
     },
     indices: {
       indiceGrimaldi: medidaSalva.shaped_score || 0, // Renomeado de shapedScore para indiceGrimaldi
-      // Recalcular classificações baseado nos valores salvos com validações
-      razaoCinturaQuadril: { valor: medidaSalva.razao_cintura_quadril || 0, faixa: 'ADEQUADO', descricao: 'Adequado' },
-      razaoCinturaEstatura: { valor: medidaSalva.razao_cintura_estatura || 0, faixa: 'BAIXO_RISCO', descricao: 'Baixo risco' },
-      indiceConicidade: { valor: medidaSalva.indice_conicidade || 0, faixa: 'ADEQUADO', descricao: 'Adequado' },
-      indiceMassaMagra: { 
-        valor: medidaSalva.altura_usada > 0 ? (medidaSalva.massa_magra || 0) / Math.pow(medidaSalva.altura_usada, 2) : 0, 
-        faixa: 'ADEQUADO', 
-        descricao: 'Adequado' 
-      },
-      indiceMassaGorda: { 
-        valor: medidaSalva.altura_usada > 0 ? (medidaSalva.massa_gorda || 0) / Math.pow(medidaSalva.altura_usada, 2) : 0, 
-        faixa: 'ADEQUADO', 
-        descricao: 'Adequado' 
-      },
-      cintura: { valor: medidaSalva.medida_cintura || 0, faixa: 'BAIXO_RISCO', descricao: 'Baixo risco' },
-      quadril: { valor: medidaSalva.medida_quadril || 0, faixa: 'BAIXO_RISCO', descricao: 'Baixo risco' }
+      // Usar funções de classificação corretas baseadas nos valores salvos
+      razaoCinturaQuadril: classificarRazaoCinturaQuadril(medidaSalva.razao_cintura_quadril || 0, medidaSalva.sexo_usado as 'M' | 'F' || 'M'),
+      razaoCinturaEstatura: classificarRazaoCinturaEstatura(medidaSalva.razao_cintura_estatura || 0),
+      indiceConicidade: classificarIndiceConicidade(medidaSalva.indice_conicidade || 0),
+      indiceMassaMagra: classificarIndiceMassaMagra(
+        medidaSalva.altura_usada > 0 ? (medidaSalva.massa_magra || 0) / Math.pow(medidaSalva.altura_usada, 2) : 0,
+        medidaSalva.sexo_usado as 'M' | 'F' || 'M'
+      ),
+      indiceMassaGorda: classificarIndiceMassaGorda(
+        medidaSalva.altura_usada > 0 ? (medidaSalva.massa_gorda || 0) / Math.pow(medidaSalva.altura_usada, 2) : 0
+      ),
+      cintura: classificarCintura(medidaSalva.medida_cintura || 0, medidaSalva.sexo_usado as 'M' | 'F' || 'M'),
+      quadril: classificarQuadril(medidaSalva.medida_quadril || 0, medidaSalva.sexo_usado as 'M' | 'F' || 'M')
     },
     medidas: {
       bracos: medidaSalva.medida_bracos || 0,
@@ -137,13 +140,6 @@ const ResultadosAnalise: React.FC<ResultadosAnaliseProps> = ({ resultado }) => {
     }
   } : null);
 
-  // Debug temporário
-  console.log('🔍 Debug ResultadosAnalise:', {
-    resultado,
-    medidaSalva,
-    dados,
-    perfil_peso: dados?.perfil?.peso
-  });
 
   if (!dados) {
     return (
@@ -157,16 +153,6 @@ const ResultadosAnalise: React.FC<ResultadosAnaliseProps> = ({ resultado }) => {
   }
 
   const interpretacoes = interpretarResultados(dados);
-
-  // Calcular classificações corretas usando as funções padronizadas
-  const classificacoes = {
-    percentualGordura: classificarPercentualGordura(dados.composicao.percentualGordura),
-    indiceMassaMagra: classificarIndiceMassaMagra(dados.indices.indiceMassaMagra.valor, dados.perfil.sexo),
-    indiceMassaGorda: classificarIndiceMassaGorda(dados.indices.indiceMassaGorda.valor),
-    razaoCinturaQuadril: classificarRazaoCinturaQuadril(dados.indices.razaoCinturaQuadril.valor, dados.perfil.sexo),
-    razaoCinturaEstatura: classificarRazaoCinturaEstatura(dados.indices.razaoCinturaEstatura.valor),
-    indiceConicidade: classificarIndiceConicidade(dados.indices.indiceConicidade.valor)
-  };
 
   // Funções para gerar faixas padronizadas baseadas no documento de referência
   const obterFaixasPercentualGordura = () => [
@@ -190,15 +176,15 @@ const ResultadosAnalise: React.FC<ResultadosAnaliseProps> = ({ resultado }) => {
   ];
 
   const obterFaixasIMM = () => [
-    { label: 'Baixo', cor: '#ef4444', inicio: 0, fim: 17.8 },
-    { label: 'Adequado', cor: '#22c55e', inicio: 17.8, fim: 22.3 },
-    { label: 'Alto', cor: '#eab308', inicio: 22.3, fim: 32 }
+    { label: 'Baixo', cor: '#ef4444', inicio: 0, fim: 17.8 }, // Vermelho - ruim
+    { label: 'Adequado', cor: '#22c55e', inicio: 17.8, fim: 22.3 }, // Verde - bom
+    { label: 'Alto', cor: '#22c55e', inicio: 22.3, fim: 32 } // Verde também - alto é bom para massa magra
   ];
 
   const obterFaixasIMG = () => [
-    { label: 'Baixo', cor: '#22c55e', inicio: 0, fim: 2.2 },
-    { label: 'Adequado', cor: '#eab308', inicio: 2.2, fim: 4.4 },
-    { label: 'Alto', cor: '#ef4444', inicio: 4.4, fim: 12 }
+    { label: 'Baixo', cor: '#22c55e', inicio: 0, fim: 2.2 }, // Verde - baixa gordura é bom
+    { label: 'Adequado', cor: '#eab308', inicio: 2.2, fim: 4.4 }, // Amarelo - moderado
+    { label: 'Alto', cor: '#ef4444', inicio: 4.4, fim: 12 } // Vermelho - muita gordura é ruim
   ];
 
   const obterFaixasRazaoCinturaQuadril = () => [
@@ -251,42 +237,115 @@ const ResultadosAnalise: React.FC<ResultadosAnaliseProps> = ({ resultado }) => {
             </div>
           </div>
 
-          {/* Percentual de gordura com escala */}
+          {/* Legenda de cores para esta seção */}
+          <LegendaCores />
+
+          {/* Percentual de gordura com escala limpa */}
           <div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               O percentual de gordura nessa avaliação tem como objetivo classificar risco para doenças cardiometabólicas, portanto não possui fins estéticos.
             </p>
             
-            <EscalaRisco
+            <EscalaRiscoLimpa
               titulo="Percentual de gordura"
               valorAtual={dados.composicao.percentualGordura}
               unidade="%"
               faixas={obterFaixasPercentualGordura()}
-              resultadoTexto={classificacoes.percentualGordura.descricao}
+              resultadoTexto={interpretacoes.percentualGordura}
             />
           </div>
 
-          {/* Índices em grid */}
+          {/* Índices em grid com escalas limpas */}
           <div className="grid grid-cols-1 gap-6">
-            <EscalaRisco
+            <EscalaRiscoLimpa
               titulo="Índice de massa magra"
               valorAtual={dados.indices.indiceMassaMagra.valor}
               unidade="kg/m²"
               faixas={obterFaixasIMM()}
-              resultadoTexto={classificacoes.indiceMassaMagra.descricao}
+              resultadoTexto={dados.indices.indiceMassaMagra.descricao}
               altura="pequena"
             />
             
-            <EscalaRisco
+            <EscalaRiscoLimpa
               titulo="Índice de massa gorda"
               valorAtual={dados.indices.indiceMassaGorda.valor}
               unidade="kg/m²"
               faixas={obterFaixasIMG()}
-              resultadoTexto={classificacoes.indiceMassaGorda.descricao}
+              resultadoTexto={dados.indices.indiceMassaGorda.descricao}
               altura="pequena"
             />
           </div>
         </div>
+      </div>
+
+      {/* ESCALAS AVANÇADAS - Indicadores que o Shaped tem */}
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
+        <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white text-center">
+          Perímetros e Razões Antropométricas
+        </h2>
+        
+        {/* Legenda de cores universal */}
+        <LegendaCores className="mb-8" />
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Cintura */}
+          <EscalaRiscoLimpa
+            titulo="Cintura"
+            valorAtual={dados.medidas.cintura}
+            unidade="cm"
+            faixas={obterFaixasCintura()}
+            resultadoTexto={dados.indices.cintura.descricao}
+          />
+
+          {/* Quadril */}
+          <EscalaRiscoLimpa
+            titulo="Quadril"
+            valorAtual={dados.medidas.quadril}
+            unidade="cm"
+            faixas={obterFaixasQuadril()}
+            resultadoTexto={dados.indices.quadril.descricao}
+          />
+
+          {/* Razão Cintura/Estatura */}
+          <EscalaRiscoLimpa
+            titulo="Razão cintura/estatura"
+            valorAtual={dados.indices.razaoCinturaEstatura.valor}
+            faixas={obterFaixasRazaoCinturaEstatura()}
+            resultadoTexto={dados.indices.razaoCinturaEstatura.descricao}
+          />
+
+          {/* Razão Cintura/Quadril */}
+          <EscalaRiscoLimpa
+            titulo="Razão cintura/quadril"
+            valorAtual={dados.indices.razaoCinturaQuadril.valor}
+            faixas={obterFaixasRazaoCinturaQuadril()}
+            resultadoTexto={dados.indices.razaoCinturaQuadril.descricao}
+          />
+        </div>
+
+        {/* Índice de Conicidade com explicação visual */}
+        <div className="mt-8">
+          <EscalaRiscoLimpa
+            titulo="Índice de conicidade"
+            valorAtual={dados.indices.indiceConicidade.valor}
+            faixas={obterFaixasIndiceConicidade()}
+            resultadoTexto={dados.indices.indiceConicidade.descricao}
+          />
+          
+          <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              <strong>Perímetros e suas razões são importantes indicadores de saúde</strong>, ajudando a monitorar e prevenir complicações associadas ao excesso de peso.
+            </p>
+            <p className="text-sm text-blue-700 dark:text-blue-300 mt-2">
+              <strong>Índice de conicidade:</strong> Indica a distribuição de gordura corporal, especialmente abdominal, para avaliar o risco de doenças cardiovasculares. Indivíduo bicôncavo possui menor risco, enquanto o bicônico apresenta risco elevado de complicações.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* GRID DE INDICADORES - Cards organizados como o Shaped */}
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
+        <GridIndicadores dados={dados} />
       </div>
 
       {/* PÁGINA 2 - Medidas e Avatar */}
@@ -300,58 +359,51 @@ const ResultadosAnalise: React.FC<ResultadosAnaliseProps> = ({ resultado }) => {
             />
           </div>
 
-          {/* Lado direito - 6 Escalas dos Indicadores */}
-          <div className="space-y-6">
-            <EscalaRisco
-              titulo="Percentual de gordura"
-              valorAtual={dados.composicao.percentualGordura}
-              unidade="%"
-              faixas={obterFaixasPercentualGordura()}
-              resultadoTexto={interpretacoes.percentualGordura}
-              altura="pequena"
-            />
+          {/* Lado direito - Gráfico de Dispersão */}
+          <GraficoDispersao
+            indiceMassaMagra={dados.indices.indiceMassaMagra.valor}
+            indiceMassaGorda={dados.indices.indiceMassaGorda.valor}
+            sexo={dados.perfil.sexo}
+          />
+        </div>
+        
+        {/* Tabela de medidas extraídas - Abaixo dos gráficos */}
+        <div className="mt-8 bg-gray-50 dark:bg-gray-800 rounded-xl p-6">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
+            Medidas Extraídas (cm)
+          </h3>
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="text-center p-3 bg-white dark:bg-gray-700 rounded-lg">
+              <div className="text-sm text-gray-600 dark:text-gray-400">Braços</div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-white">{dados.medidas.bracos.toFixed(1)} cm</div>
+            </div>
+            <div className="text-center p-3 bg-white dark:bg-gray-700 rounded-lg">
+              <div className="text-sm text-gray-600 dark:text-gray-400">Antebraços</div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-white">{dados.medidas.antebracos.toFixed(1)} cm</div>
+            </div>
+            <div className="text-center p-3 bg-white dark:bg-gray-700 rounded-lg">
+              <div className="text-sm text-gray-600 dark:text-gray-400">Cintura</div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-white">{dados.medidas.cintura.toFixed(1)} cm</div>
+            </div>
+            <div className="text-center p-3 bg-white dark:bg-gray-700 rounded-lg">
+              <div className="text-sm text-gray-600 dark:text-gray-400">Quadril</div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-white">{dados.medidas.quadril.toFixed(1)} cm</div>
+            </div>
+            <div className="text-center p-3 bg-white dark:bg-gray-700 rounded-lg">
+              <div className="text-sm text-gray-600 dark:text-gray-400">Coxas</div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-white">{dados.medidas.coxas.toFixed(1)} cm</div>
+            </div>
+            <div className="text-center p-3 bg-white dark:bg-gray-700 rounded-lg">
+              <div className="text-sm text-gray-600 dark:text-gray-400">Panturrilhas</div>
+              <div className="text-lg font-semibold text-gray-900 dark:text-white">{dados.medidas.panturrilhas.toFixed(1)} cm</div>
+            </div>
+          </div>
 
-            <EscalaRisco
-              titulo="Índice de massa magra"
-              valorAtual={dados.indices.indiceMassaMagra.valor}
-              unidade="kg/m²"
-              faixas={obterFaixasIMM()}
-              resultadoTexto={classificacoes.indiceMassaMagra.descricao}
-              altura="pequena"
-            />
-            
-            <EscalaRisco
-              titulo="Índice de massa gorda"
-              valorAtual={dados.indices.indiceMassaGorda.valor}
-              unidade="kg/m²"
-              faixas={obterFaixasIMG()}
-              resultadoTexto={classificacoes.indiceMassaGorda.descricao}
-              altura="pequena"
-            />
-
-            <EscalaRisco
-              titulo="Razão cintura/quadril"
-              valorAtual={dados.indices.razaoCinturaQuadril.valor}
-              faixas={obterFaixasRazaoCinturaQuadril()}
-              resultadoTexto={classificacoes.razaoCinturaQuadril.descricao}
-              altura="pequena"
-            />
-
-            <EscalaRisco
-              titulo="Razão cintura/estatura"
-              valorAtual={dados.indices.razaoCinturaEstatura.valor}
-              faixas={obterFaixasRazaoCinturaEstatura()}
-              resultadoTexto={classificacoes.razaoCinturaEstatura.descricao}
-              altura="pequena"
-            />
-
-            <EscalaRisco
-              titulo="Índice de conicidade"
-              valorAtual={dados.indices.indiceConicidade.valor}
-              faixas={obterFaixasIndiceConicidade()}
-              resultadoTexto={classificacoes.indiceConicidade.descricao}
-              altura="pequena"
-            />
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-center">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              Medidas extraídas automaticamente por análise de imagem
+            </div>
           </div>
         </div>
       </div>
@@ -388,6 +440,11 @@ const ResultadosAnalise: React.FC<ResultadosAnaliseProps> = ({ resultado }) => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* TABELA DE REFERÊNCIAS - Como o Shaped tem */}
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-8">
+        <TabelaReferencias dados={dados} />
       </div>
 
       {/* Aviso final igual ao PDF */}

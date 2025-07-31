@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useMemo } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { useWhyDidYouUpdate } from '../hooks/useWhyDidYouUpdate';
 
 interface UserProfile {
   user_id: string;
@@ -25,54 +24,10 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Cache global simples (sem singleton que impede re-inicialização)
-let globalProfile: UserProfile | null = null;
+// Cache de perfil em sessionStorage (mais adequado para dados de sessão)
+const PROFILE_CACHE_KEY = 'user_profile_cache';
+const CACHE_DURATION = 30 * 60 * 1000; // 30 minutos
 
-// Singleton robusto para StrictMode
-let globalAuthState = {
-  initialized: false,
-  initPromise: null as Promise<void> | null,
-  subscription: null as any,
-  activeInstances: 0
-};
-
-// Controle de eventos Supabase duplicados
-let lastEventTime = 0;
-let lastEventData: { event: string; userId?: string } | null = null;
-const EVENT_DEBOUNCE_MS = 500; // 500ms debounce entre eventos
-
-// Função para filtrar eventos duplicados do Supabase
-function shouldProcessAuthEvent(event: string, session: any): boolean {
-  const now = Date.now();
-  const currentEventData = {
-    event,
-    userId: session?.user?.id
-  };
-
-  // Verificar debounce temporal
-  if (now - lastEventTime < EVENT_DEBOUNCE_MS) {
-    return false;
-  }
-
-  // Verificar se é evento idêntico ao anterior
-  if (lastEventData && 
-      lastEventData.event === currentEventData.event && 
-      lastEventData.userId === currentEventData.userId) {
-    return false;
-  }
-
-  // Ignorar eventos SIGNED_IN repetidos para mesmo usuário
-  if (event === 'SIGNED_IN' && lastEventData?.event === 'SIGNED_IN' && 
-      lastEventData.userId === currentEventData.userId) {
-    return false;
-  }
-
-  // Atualizar dados do último evento
-  lastEventTime = now;
-  lastEventData = currentEventData;
-  
-  return true;
-}
 
 export function useAuth() {
   const context = useContext(AuthContext);
@@ -93,18 +48,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
 
-  // Cache localStorage simples
-  const PROFILE_CACHE_KEY = 'user_profile_cache';
-  const CACHE_DURATION = 30 * 60 * 1000; // 30 minutos
-
   const saveProfileToCache = (profile: UserProfile) => {
     try {
       const cacheData = {
         profile,
         timestamp: Date.now()
       };
-      localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(cacheData));
-      globalProfile = profile;
+      sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(cacheData));
     } catch (error) {
       console.warn('AuthContext: Erro ao salvar perfil no cache:', error);
     }
@@ -112,8 +62,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const getProfileFromCache = (userId: string): UserProfile | null => {
     try {
-      const cached = localStorage.getItem(PROFILE_CACHE_KEY);
-      if (!cached) return globalProfile;
+      const cached = sessionStorage.getItem(PROFILE_CACHE_KEY);
+      if (!cached) return null;
 
       const cacheData = JSON.parse(cached);
       const age = Date.now() - cacheData.timestamp;
@@ -125,20 +75,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return null;
       }
 
-      globalProfile = cacheData.profile;
       return cacheData.profile;
     } catch (error) {
       console.warn('AuthContext: Erro ao recuperar perfil do cache:', error);
-      localStorage.removeItem(PROFILE_CACHE_KEY);
-      globalProfile = null;
+      sessionStorage.removeItem(PROFILE_CACHE_KEY);
       return null;
     }
   };
 
   const clearProfileCache = () => {
     try {
-      localStorage.removeItem(PROFILE_CACHE_KEY);
-      globalProfile = null;
+      sessionStorage.removeItem(PROFILE_CACHE_KEY);
     } catch (error) {
       console.warn('AuthContext: Erro ao limpar cache:', error);
     }
@@ -190,155 +137,83 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  // Função simples para atualizar estado
+  // Função otimizada para atualizar estado
   const updateUserState = async (newSession: Session | null) => {
     try {
       if (newSession?.user) {
         setUser(newSession.user);
         setSession(newSession);
-        setProfileLoading(true);
         
-        // Primeiro, tentar recuperar do cache
+        // Buscar perfil com cache
         const cachedProfile = getProfileFromCache(newSession.user.id);
         if (cachedProfile) {
           setUserProfile(cachedProfile);
-          setProfileLoading(false);
           setLoading(false);
-        } else {
-          // Só buscar do banco se não tem cache
-          try {
-            const profile = await fetchUserProfile(newSession.user.id);
+          // Atualizar cache em background sem bloquear
+          fetchUserProfile(newSession.user.id).then(profile => {
             if (profile) {
               setUserProfile(profile);
               saveProfileToCache(profile);
             }
-          } catch (error) {
-            console.warn('Erro ao buscar perfil:', error);
-            // Usar fallback se não conseguir buscar
-            const fallbackProfile = {
-              user_id: newSession.user.id,
-              role: 'usuario'
-            };
-            setUserProfile(fallbackProfile);
-          } finally {
-            setProfileLoading(false);
+          }).catch(() => {});
+        } else {
+          setProfileLoading(true);
+          const profile = await fetchUserProfile(newSession.user.id);
+          if (profile) {
+            setUserProfile(profile);
+            saveProfileToCache(profile);
           }
+          setProfileLoading(false);
         }
       } else {
         setUser(null);
         setSession(null);
         setUserProfile(null);
-        setProfileLoading(false);
         clearProfileCache();
       }
       
       setLoading(false);
     } catch (error) {
-      console.error('Erro ao atualizar estado:', error);
+      console.error('AuthContext: Erro ao atualizar estado:', error);
       setLoading(false);
       setProfileLoading(false);
     }
   };
 
-  // Configurar listener de autenticação (singleton robusto)
+  // Configurar listener de autenticação simplificado
   useEffect(() => {
     let isMounted = true;
-    globalAuthState.activeInstances++;
 
     const initializeAuth = async () => {
-      // Usar singleton global
-      if (globalAuthState.initialized) {
-        // Só atualizar estado local
-        try {
-          const { data: { session: currentSession } } = await supabase.auth.getSession();
-          if (isMounted) {
-            await updateUserState(currentSession);
-          }
-        } catch (error) {
-          console.error('Erro ao reutilizar sessão:', error);
-          if (isMounted) {
-            setLoading(false);
-          }
+      try {
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (isMounted) {
+          await updateUserState(currentSession);
         }
-        return;
-      }
-
-      // Se há inicialização em progresso, aguardar
-      if (globalAuthState.initPromise) {
-        await globalAuthState.initPromise;
-        return;
-      }
-
-      // Criar nova inicialização
-      globalAuthState.initPromise = (async () => {
-        try {
-          const { data: { session: currentSession }, error } = await supabase.auth.getSession();
-          
-          if (error) {
-            console.error('AuthContext: Erro ao obter sessão:', error);
-          }
-
-          if (isMounted) {
-            await updateUserState(currentSession);
-          }
-
-          globalAuthState.initialized = true;
-        } catch (error) {
-          console.error('AuthContext: Erro na inicialização:', error);
-          if (isMounted) {
-            setLoading(false);
-          }
-        } finally {
-          globalAuthState.initPromise = null;
+      } catch (error) {
+        console.error('Erro ao inicializar auth:', error);
+        if (isMounted) {
+          setLoading(false);
         }
-      })();
-
-      await globalAuthState.initPromise;
+      }
     };
 
-    // Configurar listener de mudanças de estado com filtro de duplicatas
+    // Configurar listener de mudanças de estado
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, newSession) => {
-        // Filtrar eventos duplicados e desnecessários
-        if (!shouldProcessAuthEvent(event, newSession)) {
-          return; // Ignorar evento
-        }
-        
         if (isMounted) {
           await updateUserState(newSession);
         }
       }
     );
 
-    // Inicializar apenas uma vez
+    // Inicializar
     initializeAuth();
 
-    // Armazenar subscription no estado global
-    globalAuthState.subscription = subscription;
-
-    // Cleanup robusto compatível com StrictMode
+    // Cleanup
     return () => {
       isMounted = false;
-      globalAuthState.activeInstances--;
-      
-      // Só limpar completamente quando não há mais instâncias ativas
-      if (globalAuthState.activeInstances <= 0) {
-        if (globalAuthState.subscription) {
-          globalAuthState.subscription.unsubscribe();
-          globalAuthState.subscription = null;
-        }
-        // Reset completo do estado global para permitir nova inicialização
-        globalAuthState.initialized = false;
-        globalAuthState.initPromise = null;
-        globalAuthState.activeInstances = 0;
-        
-        // Limpar também os dados de eventos
-        lastEventTime = 0;
-        lastEventData = null;
-      } else {
-        // Só desconectar subscription local sem afetar o estado global
-        subscription.unsubscribe();
-      }
+      subscription.unsubscribe();
     };
   }, []); // Sem dependências para evitar loops
 
@@ -428,6 +303,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return '/admin/dashboard';
       case 'preparador':
         return '/preparador/dashboard';
+      case 'nutricionista':
+        return '/nutricionista/dashboard';
       case 'cliente':
       case 'usuario':
       default:
@@ -435,15 +312,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  // Debug para rastrear mudanças
-  useWhyDidYouUpdate('AuthContext', {
-    user: user?.id, // Só o ID para não poluir
-    session: session?.user?.id, // Só o ID para não poluir  
-    userProfile,
-    loading,
-    profileLoading,
-    isAuthenticated: !!user
-  });
 
   // Memoizar value para evitar re-renders desnecessários
   const value: AuthContextType = useMemo(() => ({

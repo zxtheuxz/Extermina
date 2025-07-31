@@ -1,4 +1,4 @@
-# 🔧 Configuração de Usuários Admin e Preparador
+# 🔧 Configuração de Usuários Admin, Preparador e Nutricionista
 
 ## 📋 Credenciais dos Usuários
 
@@ -11,6 +11,11 @@
 - **Email**: `preparador@alegrimaldi.com`
 - **Senha**: `umlC7Hmr32`
 - **Role**: `preparador`
+
+### 👩‍⚕️ Nutricionista
+- **Email**: `nutricionista@alegrimaldi.com`
+- **Senha**: `umlC7Hmr32`
+- **Role**: `nutricionista`
 
 ## 🚀 Passos para Configuração
 
@@ -29,6 +34,12 @@
 
 #### Para o Preparador:
 - **Email**: `preparador@alegrimaldi.com`
+- **Password**: `umlC7Hmr32`
+- **Auto Confirm User**: ✅ **SIM** (marcar esta opção)
+- Clique em **"Add user"**
+
+#### Para a Nutricionista:
+- **Email**: `nutricionista@alegrimaldi.com`
 - **Password**: `umlC7Hmr32`
 - **Auto Confirm User**: ✅ **SIM** (marcar esta opção)
 - Clique em **"Add user"**
@@ -69,6 +80,20 @@ WHERE email = 'preparador@alegrimaldi.com'
 ON CONFLICT (user_id) DO UPDATE SET 
   nome_completo = 'Preparador Físico',
   role = 'preparador';
+
+-- Inserir perfil para a nutricionista
+INSERT INTO perfis (user_id, nome_completo, telefone, sexo, role) 
+SELECT 
+  id, 
+  'Nutricionista',
+  '(11) 77777-7777',
+  'feminino',
+  'nutricionista'
+FROM auth.users 
+WHERE email = 'nutricionista@alegrimaldi.com'
+ON CONFLICT (user_id) DO UPDATE SET 
+  nome_completo = 'Nutricionista',
+  role = 'nutricionista';
 ```
 
 ### 3. Verificar Configuração
@@ -83,7 +108,7 @@ SELECT
   p.created_at
 FROM auth.users u
 JOIN perfis p ON u.id = p.user_id
-WHERE u.email IN ('admin@alegrimaldi.com', 'preparador@alegrimaldi.com')
+WHERE u.email IN ('admin@alegrimaldi.com', 'preparador@alegrimaldi.com', 'nutricionista@alegrimaldi.com')
 ORDER BY p.role;
 ```
 
@@ -101,6 +126,12 @@ ORDER BY p.role;
 3. Senha: `umlC7Hmr32`
 4. Deve redirecionar para: `/preparador/dashboard`
 
+### Nutricionista:
+1. Acesse `/login`
+2. Email: `nutricionista@alegrimaldi.com`
+3. Senha: `umlC7Hmr32`
+4. Deve redirecionar para: `/nutricionista/dashboard`
+
 ## 🔐 Funcionalidades por Role
 
 ### 👨‍💼 Admin (`/admin/dashboard`)
@@ -112,11 +143,22 @@ ORDER BY p.role;
 - ✅ Monitorar sistema completo
 
 ### 👨‍⚕️ Preparador (`/preparador/dashboard`)
-- ✅ Ver análises pendentes
+- ✅ Ver avaliações físicas pendentes
+- ✅ Aprovar/editar resultados físicos
+- ✅ Ver análises médicas pendentes
 - ✅ Aprovar/rejeitar medicamentos
 - ✅ Visualizar documentos médicos
+- ✅ Visualizar análises corporais dos clientes
 - ✅ Adicionar observações
 - ✅ Ver estatísticas de aprovação
+
+### 👩‍⚕️ Nutricionista (`/nutricionista/dashboard`)
+- ✅ Ver avaliações nutricionais pendentes (masculino/feminino)
+- ✅ Aprovar/editar resultados nutricionais
+- ✅ Editor com templates específicos para nutrição
+- ✅ Visualizar análises corporais dos clientes
+- ✅ Adicionar orientações e recomendações
+- ✅ Ver estatísticas de adesão
 
 ## ⚠️ Notas Importantes
 
@@ -129,6 +171,7 @@ ORDER BY p.role;
 
 Após a configuração, você terá:
 - ✅ 1 usuário admin com acesso total ao sistema
-- ✅ 1 usuário preparador com acesso às funcionalidades de aprovação
+- ✅ 1 usuário preparador com acesso às funcionalidades de aprovação física
+- ✅ 1 usuário nutricionista com acesso às funcionalidades nutricionais
 - ✅ Sistema de roles funcionando completamente
 - ✅ Redirecionamento automático baseado no role após login

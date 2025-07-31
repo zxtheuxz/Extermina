@@ -1,4 +1,4 @@
-// Validação dos cálculos MediaPipe v11.2
+// Validação dos cálculos MediaPipe v11.5
 // Teste com dados do Alan (Ectomorfo - IMC 22.8)
 
 interface TestCase {
@@ -36,7 +36,7 @@ const PROPORCOES_ANTROPOMETRICAS = {
   }
 };
 
-// Fatores de correção v11.2
+// Fatores de correção v11.5
 const FATORES_CORRECAO_MEDIAPIPE = {
   ectomorfo: {
     cintura: 0.92,
@@ -73,7 +73,7 @@ export function validarCalculosEctomorfo() {
   };
 
   const imc = alan.peso / (alan.altura * alan.altura);
-  console.log(`\n🧪 VALIDAÇÃO MediaPipe v11.2 - ${alan.nome}`);
+  console.log(`\n🧪 VALIDAÇÃO MediaPipe v11.5 - ${alan.nome}`);
   console.log(`IMC: ${imc.toFixed(1)} (Ectomorfo)`);
   console.log(`\n📐 Cálculos:`);
 
@@ -82,7 +82,7 @@ export function validarCalculosEctomorfo() {
   Object.keys(PROPORCOES_ANTROPOMETRICAS.homem).forEach(key => {
     const tipo = key as keyof typeof PROPORCOES_ANTROPOMETRICAS.homem;
     
-    // Cálculo v11.2 para ectomorfos
+    // Cálculo v11.5 para ectomorfos
     const proporcaoBase = PROPORCOES_ANTROPOMETRICAS.homem[tipo];
     const medidaBase = alan.altura * 100 * proporcaoBase;
     const fatorCorrecao = FATORES_CORRECAO_MEDIAPIPE.ectomorfo[tipo];
