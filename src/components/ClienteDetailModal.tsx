@@ -71,10 +71,8 @@ interface AvaliacaoNutricionalFeminino {
 }
 
 interface PerfilFotos {
-  foto_frente_url?: string;
-  foto_costas_url?: string;
-  foto_lateral_direita_url?: string;
-  foto_lateral_esquerda_url?: string;
+  foto_lateral_url?: string;
+  foto_abertura_url?: string;
 }
 
 interface LaudoMedico {
@@ -236,10 +234,8 @@ export function ClienteDetailModal({ cliente, isOpen, onClose }: ClienteDetailMo
       const { data: fotosData, error: fotosError } = await supabase
         .from('perfis')
         .select(`
-          foto_frente_url,
-          foto_costas_url,
-          foto_lateral_direita_url,
-          foto_lateral_esquerda_url
+          foto_lateral_url,
+          foto_abertura_url
         `)
         .eq('user_id', cliente.user_id)
         .single();
@@ -365,32 +361,18 @@ export function ClienteDetailModal({ cliente, isOpen, onClose }: ClienteDetailMo
   // Preparar dados das fotos para grid
   const fotos: FotoInfo[] = [
     {
-      id: 'frente',
-      title: 'Foto de Frente',
-      url: perfilFotos?.foto_frente_url,
-      position: 'frente',
-      uploaded: !!perfilFotos?.foto_frente_url
+      id: 'lateral',
+      title: 'Foto Lateral',
+      url: perfilFotos?.foto_lateral_url,
+      position: 'lateral',
+      uploaded: !!perfilFotos?.foto_lateral_url
     },
     {
-      id: 'costas',
-      title: 'Foto de Costas',
-      url: perfilFotos?.foto_costas_url,
-      position: 'costas',
-      uploaded: !!perfilFotos?.foto_costas_url
-    },
-    {
-      id: 'lateral_direita',
-      title: 'Foto Lateral Direita',
-      url: perfilFotos?.foto_lateral_direita_url,
-      position: 'lateral_direita',
-      uploaded: !!perfilFotos?.foto_lateral_direita_url
-    },
-    {
-      id: 'lateral_esquerda',
-      title: 'Foto Lateral Esquerda',
-      url: perfilFotos?.foto_lateral_esquerda_url,
-      position: 'lateral_esquerda',
-      uploaded: !!perfilFotos?.foto_lateral_esquerda_url
+      id: 'abertura',
+      title: 'Foto de Abertura',
+      url: perfilFotos?.foto_abertura_url,
+      position: 'abertura',
+      uploaded: !!perfilFotos?.foto_abertura_url
     }
   ];
 
@@ -1140,7 +1122,7 @@ export function ClienteDetailModal({ cliente, isOpen, onClose }: ClienteDetailMo
                     </div>
 
                     {/* Grid de Fotos */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {fotos.map((foto) => (
                         <div
                           key={foto.id}

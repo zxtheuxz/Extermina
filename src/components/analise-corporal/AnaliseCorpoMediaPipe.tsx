@@ -310,28 +310,28 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
     } finally { setIsProcessing(false); }
   }, [processarImagem, fotoAberturaUrl, fotoLateralUrl, onMedidasExtraidas, onError, alturaReal, peso, sexo, wasmSupported]);
 
-  if (isProcessing) {
+  // Iniciar análise automaticamente quando o componente montar e WASM estiver pronto
+  useEffect(() => {
+    if (wasmSupported === true && !isProcessing) {
+      console.log('🤖 Iniciando análise automática...');
+      // Pequeno delay para garantir que os canvas estejam prontos
+      const timer = setTimeout(() => {
+        iniciarAnalise();
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [wasmSupported, iniciarAnalise, isProcessing]);
+
+  // Sempre mostrar loading durante processamento ou verificação inicial
+  if (isProcessing || wasmSupported === null) {
     return <LoadingAnalise step={currentStep} />;
   }
 
+  // Se chegou aqui e não está processando, mostrar loading de preparação
   return (
     <div className="space-y-6">
-      <div className="text-center">
-        <button
-          onClick={iniciarAnalise}
-          className="w-full max-w-md mx-auto flex items-center justify-center gap-3 py-4 px-8 rounded-xl font-bold text-lg bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 text-white disabled:opacity-50 disabled:transform-none"
-          disabled={wasmSupported === null}
-        >
-          {wasmSupported ? (
-            <>
-              <FileText className="w-5 h-5" />
-              Clique aqui e gere o relatório
-            </>
-          ) : (
-            '🔄 Verificando...'
-          )}
-        </button>
-      </div>
+      <LoadingAnalise step="preparing" />
       
       {/* Canvas ocultos necessários para o MediaPipe processar as imagens */}
       <div style={{ display: 'none' }}>

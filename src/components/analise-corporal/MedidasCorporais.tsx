@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAnaliseCorpData } from '../../hooks/useAnaliseCorpData';
 import ResultadosAnalise from './ResultadosAnalise';
 import LoadingAnalise from './LoadingAnalise';
@@ -12,7 +12,7 @@ import { Camera, AlertTriangle, Loader2, Clock } from 'lucide-react';
 // Estado unificado para análise
 type AnaliseStatus = 'loading' | 'ready' | 'analyzing' | 'calculating' | 'finalizing' | 'complete' | 'error';
 
-const MedidasCorporais: React.FC = () => {
+const MedidasCorporais: React.FC = React.memo(() => {
   const { user } = useAuth();
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
@@ -52,10 +52,10 @@ const MedidasCorporais: React.FC = () => {
 
     // Verificar se pode iniciar análise automática
     const temDadosCorporais = dadosCorporais !== null;
-    const temFotosNecessarias = fotos?.foto_lateral_direita_url && fotos?.foto_abertura_url;
-    const estaLiberado = liberado === true;
+    const temFotosNecessarias = fotos?.foto_lateral_url && fotos?.foto_abertura_url;
+    // Removido verificação de liberado - análise pode ser processada sem liberação
     
-    if (temDadosCorporais && temFotosNecessarias && estaLiberado) {
+    if (temDadosCorporais && temFotosNecessarias) {
       if (!mostrarMediaPipe && status !== 'analyzing') {
         console.log('🚀 Iniciando análise automática com MediaPipe v11.5...');
         setMostrarMediaPipe(true);
@@ -64,7 +64,7 @@ const MedidasCorporais: React.FC = () => {
     } else {
       setStatus('ready');
     }
-  }, [loading, error, hasMedidasExistentes, resultadoAnalise, dadosCorporais, fotos, liberado, mostrarMediaPipe, status]);
+  }, [loading, error, hasMedidasExistentes, resultadoAnalise, dadosCorporais, fotos, mostrarMediaPipe, status]);
 
   // Limites fisiológicos realistas para validação (expandidos para biotipos diversos)
   const LIMITES_MEDIDAS = {
@@ -280,32 +280,9 @@ const MedidasCorporais: React.FC = () => {
   }
 
   // PRIORIDADE 3: Verificar condições para análise
-  const fotosNecessarias = fotos?.foto_lateral_direita_url && fotos?.foto_abertura_url;
-  const estaLiberado = liberado === true;
+  const fotosNecessarias = fotos?.foto_lateral_url && fotos?.foto_abertura_url;
   
-  // Se não está liberado
-  if (!estaLiberado) {
-    return (
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
-        <div className="flex items-center">
-          <Clock className="h-6 w-6 text-blue-600 dark:text-blue-400 mr-3" />
-          <div>
-            <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-200">
-              Aguardando liberação para análise
-            </h3>
-            <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-              Sua conta ainda não foi liberada pela equipe para realizar a análise corporal.
-            </p>
-            <p className="text-xs text-blue-600 dark:text-blue-400 mt-3">
-              📱 Aguarde! Nossa equipe irá te notificar via WhatsApp quando a análise estiver disponível.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  
-  // Se está liberado mas não tem fotos
+  // Se não tem fotos
   if (!fotosNecessarias) {
     return (
       <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
@@ -319,7 +296,7 @@ const MedidasCorporais: React.FC = () => {
               Para realizar a análise corporal, são necessárias as fotos:
             </p>
             <ul className="list-disc list-inside text-sm text-yellow-700 dark:text-yellow-300 mt-2">
-              <li>Foto lateral direita {fotos?.foto_lateral_direita_url ? '✅' : '❌'}</li>
+              <li>Foto lateral {fotos?.foto_lateral_url ? '✅' : '❌'}</li>
               <li>Foto de abertura (braços abertos) {fotos?.foto_abertura_url ? '✅' : '❌'}</li>
             </ul>
             <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-3">
@@ -336,7 +313,7 @@ const MedidasCorporais: React.FC = () => {
   if (mostrarMediaPipe && !resultadoAnalise) {
     return (
       <AnaliseCorpoMediaPipe
-        fotoLateralUrl={fotos!.foto_lateral_direita_url}
+        fotoLateralUrl={fotos!.foto_lateral_url}
         fotoAberturaUrl={fotos!.foto_abertura_url}
         alturaReal={dadosCorporais!.altura}
         peso={dadosCorporais!.peso}
@@ -383,6 +360,6 @@ const MedidasCorporais: React.FC = () => {
       </div>
     </div>
   );
-};
+});
 
 export default MedidasCorporais;

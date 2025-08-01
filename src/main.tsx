@@ -4,8 +4,7 @@ import App from './App';
 import './index.css';
 
 // Renderizar a aplicação
+// StrictMode removido temporariamente para evitar renderizações duplas
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+  <App />
 ); 

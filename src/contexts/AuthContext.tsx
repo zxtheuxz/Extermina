@@ -70,8 +70,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // Verificar se cache expirou ou é de outro usuário
       if (age > CACHE_DURATION || cacheData.profile.user_id !== userId) {
-        localStorage.removeItem(PROFILE_CACHE_KEY);
-        globalProfile = null;
+        sessionStorage.removeItem(PROFILE_CACHE_KEY);
         return null;
       }
 

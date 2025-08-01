@@ -1,15 +1,43 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { dataCache } from '../utils/cacheUtils';
 
-// Cache global para evitar múltiplas execuções simultâneas
-const dataCache = new Map<string, {
-  data: any;
-  timestamp: number;
-  promise?: Promise<any>;
-}>();
+// Cache no sessionStorage para persistir entre navegações
+const getSessionCache = (key: string) => {
+  try {
+    const cached = sessionStorage.getItem(key);
+    if (!cached) return null;
+    
+    const parsed = JSON.parse(cached);
+    const now = Date.now();
+    
+    // Verificar se ainda é válido (5 minutos)
+    if (now - parsed.timestamp < CACHE_DURATION) {
+      return parsed.data;
+    }
+    
+    // Limpar cache expirado
+    sessionStorage.removeItem(key);
+    return null;
+  } catch (error) {
+    console.error('Erro ao ler cache da sessão:', error);
+    return null;
+  }
+};
 
-const CACHE_DURATION = 30 * 1000; // 30 segundos
+const setSessionCache = (key: string, data: any) => {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({
+      data,
+      timestamp: Date.now()
+    }));
+  } catch (error) {
+    console.error('Erro ao salvar cache na sessão:', error);
+  }
+};
+
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 
 // Helper para logs condicionais de debug (preserva stack trace)
 const debugLog = process.env.NODE_ENV === 'development' 
@@ -24,7 +52,7 @@ interface DadosCorporais {
 }
 
 interface FotosAnalise {
-  foto_lateral_direita_url: string | null;
+  foto_lateral_url: string | null;
   foto_abertura_url: string | null;
 }
 
@@ -118,7 +146,7 @@ export const useAnaliseCorpData = () => {
     try {
       const { data: perfilData, error: perfilError } = await supabase
         .from('perfis')
-        .select('foto_lateral_direita_url, foto_abertura_url, liberado')
+        .select('foto_lateral_url, foto_abertura_url, liberado')
         .eq('user_id', userId)
         .single();
 
@@ -126,13 +154,22 @@ export const useAnaliseCorpData = () => {
         throw new Error(`Erro ao buscar dados do perfil: ${perfilError.message}`);
       }
 
-      return {
+      const fotosResult = {
         fotos: {
-          foto_lateral_direita_url: perfilData?.foto_lateral_direita_url || null,
+          foto_lateral_url: perfilData?.foto_lateral_url || null,
           foto_abertura_url: perfilData?.foto_abertura_url || null
         },
         liberado: perfilData?.liberado?.toLowerCase() === 'sim'
       };
+      
+      debugLog(`📸 Debug fotos para userId: ${userId}`, {
+        foto_lateral_url: fotosResult.fotos.foto_lateral_url,
+        foto_abertura_url: fotosResult.fotos.foto_abertura_url,
+        liberado: fotosResult.liberado,
+        perfilData
+      });
+      
+      return fotosResult;
     } catch (error) {
       console.error('Erro ao buscar fotos e liberação:', error);
       throw error;
@@ -184,34 +221,95 @@ export const useAnaliseCorpData = () => {
       
       debugLog(`✅ Perfil encontrado - sexo: "${perfilData.sexo}"`);
 
-      // Buscar dados corporais, fotos+liberação e verificar medidas existentes em paralelo
-      const [dadosCorporais, { fotos, liberado }, hasMedidasExistentes] = await Promise.all([
-        buscarDadosCorporais(user.id, perfilData.sexo),
-        buscarFotosELiberacao(user.id),
-        verificarMedidasExistentes(user.id)
-      ]);
+      // Buscar dados INDEPENDENTEMENTE - não usar Promise.all que falha se uma falhar
+      let dadosCorporais = null;
+      let fotos = null;
+      let liberado = false;
+      let hasMedidasExistentes = false;
+      let errorMsg = null;
 
-      setData({
+      // 1. Buscar dados corporais (pode falhar se não preenchido - OK)
+      try {
+        dadosCorporais = await buscarDadosCorporais(user.id, perfilData.sexo);
+        debugLog(`✅ Dados corporais encontrados`);
+      } catch (error) {
+        debugLog(`ℹ️ Dados corporais não encontrados (esperado se não preenchido):`, error.message);
+        // Não definir como erro global - é esperado quando não preenchido
+      }
+
+      // 2. Buscar fotos e liberação (deve sempre funcionar)
+      try {
+        const fotosResult = await buscarFotosELiberacao(user.id);
+        fotos = fotosResult.fotos;
+        liberado = fotosResult.liberado;
+        debugLog(`✅ Fotos e liberação buscadas`);
+      } catch (error) {
+        console.error(`❌ Erro ao buscar fotos/liberação:`, error);
+        errorMsg = `Erro ao buscar dados do perfil: ${error.message}`;
+      }
+
+      // 3. Verificar medidas existentes (deve sempre funcionar)
+      try {
+        hasMedidasExistentes = await verificarMedidasExistentes(user.id);
+        debugLog(`✅ Verificação de medidas concluída: ${hasMedidasExistentes}`);
+      } catch (error) {
+        console.error(`❌ Erro ao verificar medidas existentes:`, error);
+        // Não crítico, deixar como false
+      }
+
+      const newData = {
         dadosCorporais,
         fotos,
         loading: false,
-        error: null,
+        error: errorMsg, // Só mostrar erro se for técnico
         hasMedidasExistentes,
         liberado
+      };
+      
+      debugLog(`📊 Dados finais:`, {
+        temDadosCorporais: !!dadosCorporais,
+        temFotos: !!(fotos?.foto_lateral_url && fotos?.foto_abertura_url),
+        liberado,
+        hasMedidasExistentes,
+        error: errorMsg
       });
+      
+      setData(newData);
+      
+      // Salvar no cache
+      const cacheKey = `analise_corp_${user.id}`;
+      dataCache.set(cacheKey, {
+        data: newData,
+        timestamp: Date.now()
+      });
+      setSessionCache(cacheKey, newData);
 
     } catch (error) {
-      console.error('Erro ao buscar dados para análise corporal:', error);
+      console.error('Erro técnico ao buscar dados para análise corporal:', error);
       setData(prev => ({
         ...prev,
         loading: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido'
+        error: error instanceof Error ? error.message : 'Erro técnico desconhecido'
       }));
     }
   };
 
   const refetch = () => {
+    // Limpar cache antes de buscar dados novos
+    const cacheKey = `analise_corp_${user?.id}`;
+    dataCache.delete(cacheKey);
+    sessionStorage.removeItem(cacheKey);
+    
     buscarDadosCompletos();
+  };
+
+  // Função para limpar cache específico (útil quando dados são atualizados em outras páginas)
+  const clearCache = () => {
+    if (user?.id) {
+      const cacheKey = `analise_corp_${user.id}`;
+      dataCache.delete(cacheKey);
+      sessionStorage.removeItem(cacheKey);
+    }
   };
 
   useEffect(() => {
@@ -223,13 +321,30 @@ export const useAnaliseCorpData = () => {
     // Verificar cache primeiro
     const cacheKey = `analise_corp_${user.id}`;
     const cached = dataCache.get(cacheKey);
+    const sessionCached = getSessionCache(cacheKey);
     const now = Date.now();
 
+    // Tentar cache em memória primeiro
     if (cached && (now - cached.timestamp) < CACHE_DURATION) {
-      debugLog(`📦 Usando dados do cache para userId: ${user.id}`);
+      debugLog(`📦 Usando dados do cache em memória para userId: ${user.id}`);
       setData({
         ...cached.data,
         loading: false
+      });
+      return;
+    }
+    
+    // Tentar cache da sessão
+    if (sessionCached) {
+      debugLog(`💾 Usando dados do cache de sessão para userId: ${user.id}`);
+      setData({
+        ...sessionCached,
+        loading: false
+      });
+      // Atualizar cache em memória
+      dataCache.set(cacheKey, {
+        data: sessionCached,
+        timestamp: now
       });
       return;
     }
@@ -270,15 +385,19 @@ export const useAnaliseCorpData = () => {
         data: result,
         timestamp: now
       });
+      // Salvar no sessionStorage também
+      setSessionCache(cacheKey, result);
     }).catch(() => {
       // Remover do cache em caso de erro
       dataCache.delete(cacheKey);
+      sessionStorage.removeItem(cacheKey);
     });
 
   }, [user?.id]);
 
   return {
     ...data,
-    refetch
+    refetch,
+    clearCache
   };
 };

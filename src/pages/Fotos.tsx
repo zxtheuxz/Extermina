@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { supabase } from '../lib/supabase';
@@ -12,19 +12,19 @@ import {
   X, 
   AlertTriangle,
   Camera,
-  FileCheck
+  FileCheck,
+  Upload
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useActivityLoggerContext } from '../providers/ActivityLoggerProvider';
 import { ConsentModal } from '../components/ConsentModal';
 import { TermsService } from '../lib/termsService';
+import { usePageVisibility } from '../hooks/usePageVisibility';
+import { clearAnaliseCorpCache } from '../utils/cacheUtils';
 
 interface PerfilFotos {
   nome_completo?: string;
-  foto_frente_url?: string;
-  foto_costas_url?: string;
-  foto_lateral_direita_url?: string;
-  foto_lateral_esquerda_url?: string;
+  foto_lateral_url?: string;
   foto_abertura_url?: string;
 }
 
@@ -44,9 +44,10 @@ interface FotoInfo {
   url?: string;
   position: string;
   uploaded: boolean;
+  description?: string;
 }
 
-export function Fotos() {
+export const Fotos = React.memo(function Fotos() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [perfil, setPerfil] = useState<PerfilFotos | null>(null);
@@ -63,6 +64,12 @@ export function Fotos() {
   const [consentChecked, setConsentChecked] = useState(false);
   const [consentRejected, setConsentRejected] = useState(false);
   const [checkingConsent, setCheckingConsent] = useState(false);
+  const hasLoadedRef = useRef(false);
+  
+  // Hook de visibilidade para prevenir re-fetching
+  usePageVisibility({
+    preventRefetchOnFocus: true
+  });
 
   // Hook para fechar modal com tecla ESC
   useEffect(() => {
@@ -80,10 +87,14 @@ export function Fotos() {
     }
   }, [selectedPhoto]);
 
-  useEffect(() => {
-    async function loadUserPhotos() {
-      try {
-        setLoading(true);
+  const loadUserPhotos = useCallback(async () => {
+    // Se já carregou uma vez, não recarregar
+    if (hasLoadedRef.current && perfil !== null) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
         
         // Buscar usuário logado
         const { data: { user } } = await supabase.auth.getUser();
@@ -95,10 +106,7 @@ export function Fotos() {
             .from('perfis')
             .select(`
               nome_completo,
-              foto_frente_url,
-              foto_costas_url,
-              foto_lateral_direita_url,
-              foto_lateral_esquerda_url,
+              foto_lateral_url,
               foto_abertura_url
             `)
             .eq('user_id', user.id)
@@ -112,10 +120,7 @@ export function Fotos() {
             
             // Verificar se o usuário tem fotos e precisa de consentimento
             const temFotos = perfilData && (
-              perfilData.foto_frente_url ||
-              perfilData.foto_costas_url ||
-              perfilData.foto_lateral_direita_url ||
-              perfilData.foto_lateral_esquerda_url ||
+              perfilData.foto_lateral_url ||
               perfilData.foto_abertura_url
             );
             
@@ -174,65 +179,45 @@ export function Fotos() {
         setError('Erro ao verificar sua sessão.');
       } finally {
         setLoading(false);
+        hasLoadedRef.current = true;
       }
-    }
-
+  }, [activityLogger]);
+  
+  useEffect(() => {
     loadUserPhotos();
-  }, [navigate, activityLogger]);
+  }, [loadUserPhotos]);
 
   // Preparar dados das fotos
   const fotos: FotoInfo[] = [
     {
-      id: 'frente',
-      title: 'Foto de Frente',
-      url: perfil?.foto_frente_url,
-      position: 'frente',
-      uploaded: !!perfil?.foto_frente_url
-    },
-    {
-      id: 'costas',
-      title: 'Foto de Costas',
-      url: perfil?.foto_costas_url,
-      position: 'costas',
-      uploaded: !!perfil?.foto_costas_url
-    },
-    {
-      id: 'lateral_direita',
-      title: 'Foto Lateral Direita',
-      url: perfil?.foto_lateral_direita_url,
-      position: 'lateral_direita',
-      uploaded: !!perfil?.foto_lateral_direita_url
-    },
-    {
-      id: 'lateral_esquerda',
-      title: 'Foto Lateral Esquerda',
-      url: perfil?.foto_lateral_esquerda_url,
-      position: 'lateral_esquerda',
-      uploaded: !!perfil?.foto_lateral_esquerda_url
+      id: 'lateral',
+      title: 'Foto Lateral',
+      url: perfil?.foto_lateral_url,
+      position: 'lateral',
+      uploaded: !!perfil?.foto_lateral_url,
+      description: 'Tire uma foto de perfil (lado do corpo) em pé, com boa iluminação'
     },
     {
       id: 'abertura',
       title: 'Foto de Abertura',
       url: perfil?.foto_abertura_url,
       position: 'abertura',
-      uploaded: !!perfil?.foto_abertura_url
+      uploaded: !!perfil?.foto_abertura_url,
+      description: 'Tire uma foto de frente com os braços abertos em cruz (formato T)'
     }
   ];
 
   const fotosEnviadas = fotos.filter(foto => foto.uploaded).length;
   const totalFotos = fotos.length;
-  
-  // Verificar se não há fotos nem laudos
-  const semFotosELaudos = fotosEnviadas === 0 && laudos.length === 0;
 
-  const handleDownloadLaudo = (laudoUrl: string) => {
+  const handleDownloadLaudo = useCallback((laudoUrl: string) => {
     if (laudoUrl) {
       window.open(laudoUrl, '_blank');
     }
-  };
+  }, []);
 
   // Funções para lidar com o consentimento
-  const handleConsentAccept = async () => {
+  const handleConsentAccept = useCallback(async () => {
     try {
       if (!user) {
         setError('Usuário não autenticado');
@@ -250,9 +235,9 @@ export function Fotos() {
       console.error('Erro ao aceitar consentimento:', error);
       setError('Erro ao registrar consentimento. Tente novamente.');
     }
-  };
+  }, [user]);
 
-  const handleConsentReject = async () => {
+  const handleConsentReject = useCallback(async () => {
     try {
       if (!user) {
         setError('Usuário não autenticado');
@@ -271,13 +256,191 @@ export function Fotos() {
       console.error('Erro ao rejeitar consentimento:', error);
       setError('Erro ao registrar consentimento. Tente novamente.');
     }
-  };
+  }, [user]);
 
-  const handleConsentClose = () => {
+  const handleConsentClose = useCallback(() => {
     // Para fotos, fechar sem consentimento ainda permite acesso
     setConsentChecked(true);
     setShowConsentModal(false);
-  };
+  }, []);
+
+  // Função para lidar com upload de fotos
+  const handleUploadClick = useCallback((fotoId: string) => {
+    // Criar input file programaticamente
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file && user) {
+        await handleFileUpload(file, fotoId);
+      }
+    };
+    input.click();
+  }, [user]);
+
+  const handleFileUpload = useCallback(async (file: File, fotoId: string) => {
+    if (!user) {
+      setError('Usuário não autenticado');
+      return;
+    }
+
+    // Validar tipo de arquivo
+    if (!file.type.startsWith('image/')) {
+      setError('Por favor, selecione um arquivo de imagem');
+      return;
+    }
+
+    // Validar tamanho (máx 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      setError('A imagem deve ter no máximo 10MB');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Gerar nome único para o arquivo
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/${fotoId}_${Date.now()}.${fileExt}`;
+
+      // Upload para o Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('fotos-usuarios')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // Obter URL pública da foto
+      const { data: { publicUrl } } = supabase.storage
+        .from('fotos-usuarios')
+        .getPublicUrl(fileName);
+
+      // Determinar qual campo atualizar
+      const updateData: any = {};
+      if (fotoId === 'lateral') {
+        updateData.foto_lateral_url = publicUrl;
+        updateData.foto_lateral_enviada_em = new Date().toISOString();
+      } else if (fotoId === 'abertura') {
+        updateData.foto_abertura_url = publicUrl;
+        updateData.foto_abertura_enviada_em = new Date().toISOString();
+      }
+
+      // Atualizar perfil com a URL da foto
+      const { error: updateError } = await supabase
+        .from('perfis')
+        .update(updateData)
+        .eq('user_id', user.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Registrar upload
+      try {
+        await activityLogger.logDocumentUpload(
+          `foto_${fotoId}`,
+          `${fotoId}_${Date.now()}.jpg`
+        );
+      } catch (logError) {
+        console.error('Erro ao registrar upload:', logError);
+      }
+
+      // Recarregar dados
+      await loadUserPhotos();
+
+      // Limpar cache da análise corporal para forçar atualização
+      clearAnaliseCorpCache(user.id);
+
+      // Mostrar mensagem de sucesso (opcional - você pode adicionar um toast/notificação aqui)
+      console.log(`Foto ${fotoId} enviada com sucesso!`);
+      
+      // Verificar se deve processar análise corporal automaticamente
+      await verificarEProcessarAnalise();
+      
+    } catch (error) {
+      console.error('Erro ao fazer upload da foto:', error);
+      setError('Erro ao enviar foto. Por favor, tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  }, [user, activityLogger, loadUserPhotos]);
+  
+  // Função para verificar e processar análise corporal automaticamente
+  const verificarEProcessarAnalise = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      // Buscar perfil atualizado
+      const { data: perfilAtualizado } = await supabase
+        .from('perfis')
+        .select('foto_lateral_url, foto_abertura_url')
+        .eq('user_id', user.id)
+        .single();
+        
+      // Se tem ambas as fotos
+      if (perfilAtualizado?.foto_lateral_url && perfilAtualizado?.foto_abertura_url) {
+        console.log('✅ Ambas as fotos detectadas, verificando se precisa processar análise...');
+        
+        // Verificar se já tem análise corporal
+        const { data: analiseExistente } = await supabase
+          .from('medidas_corporais')
+          .select('id')
+          .eq('user_id', user.id)
+          .limit(1);
+          
+        if (!analiseExistente || analiseExistente.length === 0) {
+          console.log('🚀 Iniciando processamento automático de análise corporal...');
+          
+          // Verificar se tem avaliação nutricional
+          const { data: avalNutricional } = await supabase
+            .from('avaliacao_nutricional')
+            .select('id')
+            .eq('user_id', user.id)
+            .limit(1);
+            
+          const { data: avalNutricionalFem } = await supabase
+            .from('avaliacao_nutricional_feminino')
+            .select('id')
+            .eq('user_id', user.id)
+            .limit(1);
+            
+          if ((avalNutricional && avalNutricional.length > 0) || 
+              (avalNutricionalFem && avalNutricionalFem.length > 0)) {
+            
+            console.log('📊 Chamando Edge Function para processar análise corporal...');
+            
+            // Chamar Edge Function para processar
+            const { data, error } = await supabase.functions.invoke('processar-analise-corporal', {
+              body: { user_id: user.id }
+            });
+            
+            if (error) {
+              console.error('❌ Erro ao processar análise corporal:', error);
+            } else {
+              console.log('✅ Análise corporal processada com sucesso!', data);
+              // Limpar cache novamente para forçar atualização
+              clearAnaliseCorpCache(user.id);
+            }
+          } else {
+            console.log('⚠️ Usuário não tem avaliação nutricional preenchida');
+          }
+        } else {
+          console.log('ℹ️ Análise corporal já existe para este usuário');
+        }
+      } else {
+        console.log('ℹ️ Aguardando ambas as fotos para processar análise');
+      }
+    } catch (error) {
+      console.error('Erro ao verificar/processar análise corporal:', error);
+    }
+  }, [user]);
 
   if (loading || checkingConsent) {
     return (
@@ -340,7 +503,7 @@ export function Fotos() {
         {consentChecked && (
           <div className="max-w-7xl mx-auto">
           {/* Header */}
-          <div className={`mb-8 ${semFotosELaudos ? 'blur-sm' : ''}`}>
+          <div className="mb-8">
             <h1 className={`text-4xl font-bold mb-2 ${
               isDarkMode ? 'text-white' : 'text-gray-900'
             }`}>
@@ -355,7 +518,7 @@ export function Fotos() {
 
           {/* Conteúdo Principal */}
               {/* Status das Fotos */}
-              <div className={`mb-8 p-6 rounded-2xl shadow-lg border ${semFotosELaudos ? 'blur-sm' : ''} ${
+              <div className={`mb-8 p-6 rounded-2xl shadow-lg border ${
                 isDarkMode 
                   ? 'bg-gray-900 border-gray-700' 
                   : 'bg-white border-gray-200'
@@ -379,32 +542,9 @@ export function Fotos() {
               </div>
             </div>
             
-            <div className={`p-4 rounded-xl mb-6 ${
-              isDarkMode 
-                ? 'bg-blue-900/20 border border-blue-500/30' 
-                : 'bg-blue-50 border border-blue-200'
-            }`}>
-              <div className="flex items-center">
-                <Camera className={`h-5 w-5 mr-3 ${
-                  isDarkMode ? 'text-blue-400' : 'text-blue-600'
-                }`} />
-                <div>
-                  <p className={`text-sm font-medium mb-1 ${
-                    isDarkMode ? 'text-blue-200' : 'text-blue-800'
-                  }`}>
-                    Fotos de Progresso - Não Obrigatórias
-                  </p>
-                  <p className={`text-xs ${
-                    isDarkMode ? 'text-blue-300' : 'text-blue-700'
-                  }`}>
-                    O envio de fotos não é obrigatório. Caso seja necessário, nossa equipe de suporte entrará em contato pelo WhatsApp para solicitar as fotos.
-                  </p>
-                </div>
-              </div>
-            </div>
 
             {/* Grid de Fotos */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {fotos.map((foto) => (
                 <div
                   key={foto.id}
@@ -429,16 +569,23 @@ export function Fotos() {
                       </div>
                     </>
                   ) : (
-                    <div className={`w-full h-full flex flex-col items-center justify-center ${
-                      isDarkMode ? 'bg-gray-800' : 'bg-gray-100'
-                    }`}>
-                      <Clock className={`h-8 w-8 mb-2 ${
+                    <div className={`w-full h-full flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-opacity-80 ${
+                      isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'
+                    }`}
+                      onClick={() => handleUploadClick(foto.id)}
+                    >
+                      <Upload className={`h-12 w-12 mb-3 ${
                         isDarkMode ? 'text-gray-400' : 'text-gray-500'
                       }`} />
-                      <p className={`text-xs text-center px-2 ${
+                      <p className={`text-sm font-medium mb-1 ${
+                        isDarkMode ? 'text-gray-300' : 'text-gray-700'
+                      }`}>
+                        Clique para enviar
+                      </p>
+                      <p className={`text-xs text-center px-4 ${
                         isDarkMode ? 'text-gray-400' : 'text-gray-500'
                       }`}>
-                        Aguardando foto
+                        {foto.description}
                       </p>
                     </div>
                   )}
@@ -457,7 +604,7 @@ export function Fotos() {
           </div>
 
           {/* Seção de Laudos */}
-          <div className={`mb-8 p-6 rounded-2xl shadow-lg border ${semFotosELaudos ? 'blur-sm' : ''} ${
+          <div className={`mb-8 p-6 rounded-2xl shadow-lg border ${
             isDarkMode 
               ? 'bg-gray-900 border-gray-700' 
               : 'bg-white border-gray-200'
@@ -553,51 +700,6 @@ export function Fotos() {
         </div>
         )}
 
-        {/* Overlay quando não há fotos nem laudos */}
-        {semFotosELaudos && (
-          <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-40 p-4">
-            <div className={`max-w-md w-full p-8 rounded-2xl shadow-2xl text-center border ${
-              isDarkMode 
-                ? 'bg-gray-900 border-gray-700' 
-                : 'bg-white border-gray-200'
-            }`}>
-              <div className={`w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center ${
-                isDarkMode ? 'bg-green-900/30' : 'bg-green-100'
-              }`}>
-                <CheckCircle className={`h-8 w-8 ${
-                  isDarkMode ? 'text-green-400' : 'text-green-600'
-                }`} />
-              </div>
-              <h3 className={`text-xl font-bold mb-4 ${
-                isDarkMode ? 'text-white' : 'text-gray-900'
-              }`}>
-                Fique tranquilo(a)!
-              </h3>
-              <p className={`text-sm leading-relaxed ${
-                isDarkMode ? 'text-gray-300' : 'text-gray-600'
-              }`}>
-                Caso seja necessário fotos ou documentos, nossa equipe irá te comunicar via WhatsApp.
-              </p>
-              <div className={`mt-6 p-4 rounded-xl ${
-                isDarkMode 
-                  ? 'bg-blue-900/20 border border-blue-500/30' 
-                  : 'bg-blue-50 border border-blue-200'
-              }`}>
-                <p className={`text-xs ${
-                  isDarkMode ? 'text-blue-300' : 'text-blue-700'
-                }`}>
-                  📱 Fique atento às mensagens no WhatsApp
-                </p>
-              </div>
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="mt-6 w-full py-3 px-6 rounded-xl font-bold bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white transition-all duration-200"
-              >
-                Ir para Início
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Modal para visualizar foto */}
         {selectedPhoto && (
@@ -647,4 +749,4 @@ export function Fotos() {
       </div>
     </Layout>
   );
-}
+});

@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { User } from '@supabase/supabase-js';
-import { Apple, Users, FileCheck, TrendingUp, Clock, BarChart3, AlertCircle, CheckCircle, Activity, Calendar, LogOut, Salad, ChefHat } from 'lucide-react';
+import { Apple, Users, FileCheck, TrendingUp, Clock, BarChart3, AlertCircle, CheckCircle, Activity, Calendar, LogOut, Salad, ChefHat, Brain } from 'lucide-react';
 import { AvaliacoesNutricionaisQueue } from '../../components/nutricionista/AvaliacoesNutricionaisQueue';
+import { AnaliseCorporalQueue } from '../../components/shared/AnaliseCorporalQueue';
+import { ClientesAptosCorporal } from '../../components/nutricionista/ClientesAptosCorporal';
 
 interface Perfil {
   nome_completo?: string;
@@ -15,11 +17,12 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
-  const [activeTab, setActiveTab] = useState<'masculino' | 'feminino'>('masculino');
+  const [activeTab, setActiveTab] = useState<'masculino' | 'feminino' | 'corporal'>('masculino');
   const [stats, setStats] = useState({
     clientesAtivos: 0,
     avaliacoesMasculinoPendentes: 0,
     avaliacoesFemininoPendentes: 0,
+    analisesCorporaisPendentes: 0,
     avaliacoesHoje: 0,
     taxaAdesao: 0
   });
@@ -67,10 +70,15 @@ export function Dashboard() {
             .select('*', { count: 'exact', head: true })
             .gte('created_at', new Date().toISOString().split('T')[0]);
           
+          const { count: analisesCorporais } = await supabase
+            .from('medidas_corporais')
+            .select('*', { count: 'exact', head: true });
+          
           setStats({
             clientesAtivos: clientesAtivos || 0,
             avaliacoesMasculinoPendentes: avaliacoesMasculino || 0,
             avaliacoesFemininoPendentes: avaliacoesFeminino || 0,
+            analisesCorporaisPendentes: analisesCorporais || 0,
             avaliacoesHoje: avaliacoesHoje || 0,
             taxaAdesao: 87 // Valor fixo para demonstração
           });
@@ -160,7 +168,7 @@ export function Dashboard() {
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
             <div className="bg-white rounded-xl shadow-sm border border-amber-200 p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -200,6 +208,20 @@ export function Dashboard() {
               <div className="mt-4 flex items-center">
                 <Clock className="w-4 h-4 text-pink-500 mr-1" />
                 <span className="text-sm text-pink-600">Pendentes</span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-blue-200 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-600">Análises Corporais</p>
+                  <p className="text-3xl font-bold text-slate-900">{stats.analisesCorporaisPendentes}</p>
+                </div>
+                <Brain className="w-8 h-8 text-blue-600" />
+              </div>
+              <div className="mt-4 flex items-center">
+                <Activity className="w-4 h-4 text-blue-500 mr-1" />
+                <span className="text-sm text-blue-600">Disponíveis para revisão</span>
               </div>
             </div>
 
@@ -258,13 +280,44 @@ export function Dashboard() {
                     )}
                   </div>
                 </button>
+                <button
+                  onClick={() => setActiveTab('corporal')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    activeTab === 'corporal'
+                      ? 'border-amber-500 text-amber-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Brain className="w-4 h-4" />
+                    Análise Corporal
+                    {stats.analisesCorporaisPendentes > 0 && (
+                      <span className="ml-2 bg-blue-100 text-blue-600 text-xs font-medium px-2 py-0.5 rounded-full">
+                        {stats.analisesCorporaisPendentes}
+                      </span>
+                    )}
+                  </div>
+                </button>
               </nav>
             </div>
           </div>
 
           {/* Main Content */}
           <div className="w-full">
-            <AvaliacoesNutricionaisQueue tipoAvaliacao={activeTab} />
+            {activeTab === 'corporal' ? (
+              <div className="space-y-8">
+                {/* Clientes aptos para gerar análise */}
+                <ClientesAptosCorporal />
+                
+                {/* Divisor */}
+                <div className="border-t border-slate-200 pt-8">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">Análises Corporais Processadas</h3>
+                  <AnaliseCorporalQueue userRole="nutricionista" />
+                </div>
+              </div>
+            ) : (
+              <AvaliacoesNutricionaisQueue tipoAvaliacao={activeTab as 'masculino' | 'feminino'} />
+            )}
           </div>
 
         </div>
