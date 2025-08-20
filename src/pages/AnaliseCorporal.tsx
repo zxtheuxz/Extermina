@@ -47,8 +47,8 @@ export const AnaliseCorporal = React.memo(function AnaliseCorporal() {
     preventRefetchOnFocus: true
   });
 
-  // Verificar requisitos para acesso à análise
-  const verificarRequisitos = () => {
+  // Verificar requisitos para acesso à análise com memoização
+  const statusRequisitos = React.useMemo(() => {
     if (loading || !user) return null;
     
     const requisitos = {
@@ -78,7 +78,7 @@ export const AnaliseCorporal = React.memo(function AnaliseCorporal() {
       todos: requisitosAtendidos,
       erro: dataError
     };
-  };
+  }, [loading, user, dadosCorporais, fotos, liberado, dataError]);
 
   useEffect(() => {
     async function loadAnalysisPage() {
@@ -111,7 +111,6 @@ export const AnaliseCorporal = React.memo(function AnaliseCorporal() {
     loadAnalysisPage();
   }, [navigate, activityLogger]);
 
-  const statusRequisitos = verificarRequisitos();
 
   if (loading || !user) {
     return (
@@ -122,7 +121,7 @@ export const AnaliseCorporal = React.memo(function AnaliseCorporal() {
           <div className="flex items-center space-x-3">
             <Loader2 className="animate-spin rounded-full h-12 w-12 text-purple-500" />
             <span className={`text-lg ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-              Verificando requisitos para análise...
+              Carregando dados da análise corporal...
             </span>
           </div>
         </div>

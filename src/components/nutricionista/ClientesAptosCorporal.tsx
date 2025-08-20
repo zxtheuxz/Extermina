@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { normalizarAltura } from '../../utils/normalizarAltura';
 import { 
   User, 
   Brain, 
@@ -90,13 +91,16 @@ export function ClientesAptosCorporal() {
         clientesMasc.forEach(cliente => {
           const perfil = perfisMap.get(cliente.user_id);
           if (perfil) {
+            // Usa a função para normalizar altura para metros
+            const alturaEmMetros = normalizarAltura(cliente.altura);
+            
             todosClientes.push({
               user_id: cliente.user_id,
               nome_completo: perfil.nome_completo,
               sexo: perfil.sexo,
               foto_lateral_url: perfil.foto_lateral_url,
               foto_abertura_url: perfil.foto_abertura_url,
-              altura: cliente.altura / 100, // Converter para metros
+              altura: alturaEmMetros,
               peso: cliente.peso,
               data_avaliacao: cliente.created_at,
               tipo_avaliacao: 'masculino'
@@ -109,13 +113,16 @@ export function ClientesAptosCorporal() {
         clientesFem.forEach(cliente => {
           const perfil = perfisMap.get(cliente.user_id);
           if (perfil) {
+            // Usa a função para normalizar altura para metros
+            const alturaEmMetros = normalizarAltura(cliente.altura);
+            
             todosClientes.push({
               user_id: cliente.user_id,
               nome_completo: perfil.nome_completo,
               sexo: perfil.sexo,
               foto_lateral_url: perfil.foto_lateral_url,
               foto_abertura_url: perfil.foto_abertura_url,
-              altura: cliente.altura / 100, // Converter para metros
+              altura: alturaEmMetros,
               peso: cliente.peso,
               data_avaliacao: cliente.created_at,
               tipo_avaliacao: 'feminino'

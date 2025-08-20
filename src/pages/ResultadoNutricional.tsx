@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { jsPDF } from 'jspdf';
-import { Play, Download, ArrowLeft } from 'lucide-react';
+import { Play, Download, ArrowLeft, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 // Definição do objeto themeStyles que faltava
 const themeStyles = {
@@ -144,9 +144,53 @@ export function ResultadoNutricional() {
   const [secaoSelecionada, setSecaoSelecionada] = useState<string>('completo');
   const [secoesDisponiveis, setSecoesDisponiveis] = useState<string[]>([]);
   
+  // Estado para observações personalizadas
+  const [observacoesPersonalizadas, setObservacoesPersonalizadas] = useState<string | null>(null);
+  const [observacoesExpandidas, setObservacoesExpandidas] = useState<boolean>(true);
+  
   // Obter o ID da query string
   const queryParams = new URLSearchParams(location.search);
   const id = queryParams.get('id');
+
+  // Função para extrair observações personalizadas do nutricionista
+  const extrairObservacoesNutricional = (conteudo: string): string | null => {
+    const refeicoes = ['Café da manhã', 'Colação', 'Almoço', 'Lanche da Tarde', 'Jantar', 'Ceia'];
+    let indexPrimeiraRefeicao = conteudo.length;
+    
+    // Encontrar o índice da primeira refeição
+    for (const refeicao of refeicoes) {
+      const regex = new RegExp(`^${refeicao}\\s*$`, 'im');
+      const match = conteudo.match(regex);
+      
+      if (match && match.index !== undefined && match.index < indexPrimeiraRefeicao) {
+        indexPrimeiraRefeicao = match.index;
+      }
+    }
+    
+    // Se encontrou alguma refeição e há texto antes dela
+    if (indexPrimeiraRefeicao > 0 && indexPrimeiraRefeicao < conteudo.length) {
+      const observacoes = conteudo.substring(0, indexPrimeiraRefeicao).trim();
+      
+      // Remover o título padrão do planejamento se existir
+      const titulosPadrao = [
+        /Planejamento alimentar.*kcal.*/i,
+        /Emagrecimento.*kcal.*/i,
+        /Ganho.*massa.*kcal.*/i
+      ];
+      
+      let observacoesLimpas = observacoes;
+      for (const regex of titulosPadrao) {
+        observacoesLimpas = observacoesLimpas.replace(regex, '').trim();
+      }
+      
+      // Retornar apenas se houver conteúdo significativo após limpar
+      if (observacoesLimpas.length > 0) {
+        return observacoesLimpas;
+      }
+    }
+    
+    return null;
+  };
 
   // Função para extrair seções disponíveis do conteúdo
   const extrairSecoesDisponiveis = (conteudo: string) => {
@@ -512,11 +556,15 @@ export function ResultadoNutricional() {
     buscarPerfil();
   }, [id]);
 
-  // Extrair seções disponíveis quando o perfil for carregado
+  // Extrair seções disponíveis e observações quando o perfil for carregado
   useEffect(() => {
     if (perfil?.resultado_nutricional) {
       const secoes = extrairSecoesDisponiveis(perfil.resultado_nutricional);
       setSecoesDisponiveis(secoes);
+      
+      // Extrair observações personalizadas
+      const observacoes = extrairObservacoesNutricional(perfil.resultado_nutricional);
+      setObservacoesPersonalizadas(observacoes);
     }
   }, [perfil?.resultado_nutricional]);
 
@@ -1457,6 +1505,40 @@ export function ResultadoNutricional() {
         // Renderizar o planejamento alimentar em uma interface moderna
         return (
           <div className="space-y-6">
+            {/* Observações Personalizadas do Nutricionista */}
+            {observacoesPersonalizadas && (
+              <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg shadow-sm overflow-hidden">
+                <div 
+                  className="p-4 cursor-pointer hover:bg-amber-100/50 dark:hover:bg-amber-900/30 transition-colors"
+                  onClick={() => setObservacoesExpandidas(!observacoesExpandidas)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                      <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-100">
+                        Observações do Nutricionista
+                      </h3>
+                    </div>
+                    {observacoesExpandidas ? (
+                      <ChevronUp className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                    )}
+                  </div>
+                </div>
+                
+                {observacoesExpandidas && (
+                  <div className="px-4 pb-4 border-t border-amber-200 dark:border-amber-800">
+                    <div className="pt-4">
+                      <pre className="whitespace-pre-wrap text-gray-800 dark:text-gray-200 font-sans text-sm leading-relaxed">
+                        {observacoesPersonalizadas}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Título principal com informações de calorias e objetivo */}
             {tituloGeral && (
               <div className="bg-orange-500 text-white p-3 rounded-t-lg text-center font-bold text-lg">

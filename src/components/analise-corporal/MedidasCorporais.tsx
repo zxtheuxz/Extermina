@@ -44,16 +44,16 @@ const MedidasCorporais: React.FC = React.memo(() => {
       return;
     }
 
-    // Se tem medidas existentes, está completo
+    // IMPORTANTE: Se já tem medidas existentes no banco, não processar novamente
     if (hasMedidasExistentes) {
+      console.log('📊 Medidas existentes encontradas no banco - mostrando resultados salvos');
       setStatus('complete');
       return;
     }
 
-    // Verificar se pode iniciar análise automática
+    // Verificar se pode iniciar análise automática (apenas se NÃO tem medidas existentes)
     const temDadosCorporais = dadosCorporais !== null;
     const temFotosNecessarias = fotos?.foto_lateral_url && fotos?.foto_abertura_url;
-    // Removido verificação de liberado - análise pode ser processada sem liberação
     
     if (temDadosCorporais && temFotosNecessarias) {
       if (!mostrarMediaPipe && status !== 'analyzing') {
@@ -64,7 +64,7 @@ const MedidasCorporais: React.FC = React.memo(() => {
     } else {
       setStatus('ready');
     }
-  }, [loading, error, hasMedidasExistentes, resultadoAnalise, dadosCorporais, fotos, mostrarMediaPipe, status]);
+  }, [loading, error, resultadoAnalise, dadosCorporais, fotos, mostrarMediaPipe, status, hasMedidasExistentes]);
 
   // Limites fisiológicos realistas para validação (expandidos para biotipos diversos)
   const LIMITES_MEDIDAS = {
@@ -167,6 +167,19 @@ const MedidasCorporais: React.FC = React.memo(() => {
     // 🛡️ VALIDAÇÃO DE SEGURANÇA: Aplicar limites antes do insert
     const resultadoValidado = validarLimitesMedidas(resultado);
 
+    // Debug para verificar valores antes de salvar
+    console.log('📊 Salvando resultados no Supabase:', {
+      medidas: resultadoValidado.medidas,
+      composicao: resultadoValidado.composicao,
+      indices: {
+        razaoCinturaQuadril: resultadoValidado.indices.razaoCinturaQuadril.valor,
+        razaoCinturaEstatura: resultadoValidado.indices.razaoCinturaEstatura.valor,
+        indiceConicidade: resultadoValidado.indices.indiceConicidade.valor,
+        indiceGrimaldi: resultadoValidado.indices.indiceGrimaldi
+      },
+      perfil: resultado.perfil
+    });
+
     const { error: insertError } = await supabase
       .from('medidas_corporais')
       .insert({
@@ -202,8 +215,11 @@ const MedidasCorporais: React.FC = React.memo(() => {
       });
 
     if (insertError) {
+      console.error('❌ Erro ao salvar no Supabase:', insertError);
       throw insertError;
     }
+
+    console.log('✅ Resultados salvos com sucesso no Supabase');
   };
 
   const handleMedidasExtraidas = async (medidas: any) => {
@@ -216,9 +232,25 @@ const MedidasCorporais: React.FC = React.memo(() => {
     setErrorAnalise(null);
 
     try {
+      // Debug: Verificar dados de entrada
+      console.log('📏 Medidas extraídas pelo MediaPipe:', medidas);
+      console.log('👤 Dados corporais do usuário:', dadosCorporais);
+
       // Realizar análise completa
       const resultado = analisarComposicaoCorporal(medidas, dadosCorporais);
       
+      // Debug: Verificar resultado da análise
+      console.log('📊 Resultado da análise corporal:', {
+        composicao: resultado.composicao,
+        indices: {
+          razaoCinturaQuadril: resultado.indices.razaoCinturaQuadril,
+          razaoCinturaEstatura: resultado.indices.razaoCinturaEstatura,
+          indiceConicidade: resultado.indices.indiceConicidade,
+          indiceGrimaldi: resultado.indices.indiceGrimaldi
+        },
+        perfil: resultado.perfil
+      });
+
       // Mudança para etapa de finalização
       setStatus('finalizing');
       
@@ -269,11 +301,13 @@ const MedidasCorporais: React.FC = React.memo(() => {
     );
   }
 
-  // Se status é complete, mostrar resultados
+  // Se status é complete, mostrar resultados (do banco ou recém calculados)
   if (status === 'complete') {
+    // Se tem resultado recém calculado, usar ele
     if (resultadoAnalise) {
       return <ResultadosAnalise resultado={resultadoAnalise} />;
     }
+    // Se tem medidas existentes no banco, buscar e mostrar
     if (hasMedidasExistentes) {
       return <ResultadosAnalise />;
     }

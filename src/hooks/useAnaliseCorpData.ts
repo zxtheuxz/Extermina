@@ -63,6 +63,10 @@ interface AnaliseCorpData {
   error: string | null;
   hasMedidasExistentes: boolean;
   liberado: boolean;
+  ultimaMedida?: {
+    id: string;
+    created_at: string;
+  } | null;
 }
 
 export const useAnaliseCorpData = () => {
@@ -73,8 +77,10 @@ export const useAnaliseCorpData = () => {
     loading: true,
     error: null,
     hasMedidasExistentes: false,
-    liberado: false
+    liberado: false,
+    ultimaMedida: null
   });
+  const [validandoCache, setValidandoCache] = useState(false);
 
   const calcularIdade = (dataNascimento: string): number => {
     const hoje = new Date();
@@ -180,19 +186,26 @@ export const useAnaliseCorpData = () => {
     try {
       const { data: medidasData, error: medidasError } = await supabase
         .from('medidas_corporais')
-        .select('id')
+        .select('id, created_at')
         .eq('user_id', userId)
+        .order('created_at', { ascending: false })
         .limit(1);
 
       if (medidasError) {
-        console.error('Erro ao verificar medidas existentes:', medidasError);
-        return false;
+        // Ignorar erro 406 (Not Acceptable) que ocorre quando não há dados
+        if (medidasError.code !== '406') {
+          console.error('Erro ao verificar medidas existentes:', medidasError);
+        }
+        return { existe: false, ultimaMedida: null };
       }
 
-      return medidasData && medidasData.length > 0;
+      return {
+        existe: medidasData && medidasData.length > 0,
+        ultimaMedida: medidasData && medidasData.length > 0 ? medidasData[0] : null
+      };
     } catch (error) {
       console.error('Erro ao verificar medidas existentes:', error);
-      return false;
+      return { existe: false, ultimaMedida: null };
     }
   };
 
@@ -249,9 +262,12 @@ export const useAnaliseCorpData = () => {
       }
 
       // 3. Verificar medidas existentes (deve sempre funcionar)
+      let ultimaMedida = null;
       try {
-        hasMedidasExistentes = await verificarMedidasExistentes(user.id);
-        debugLog(`✅ Verificação de medidas concluída: ${hasMedidasExistentes}`);
+        const resultado = await verificarMedidasExistentes(user.id);
+        hasMedidasExistentes = resultado.existe;
+        ultimaMedida = resultado.ultimaMedida;
+        debugLog(`✅ Verificação de medidas concluída: ${hasMedidasExistentes}`, ultimaMedida);
       } catch (error) {
         console.error(`❌ Erro ao verificar medidas existentes:`, error);
         // Não crítico, deixar como false
@@ -263,7 +279,8 @@ export const useAnaliseCorpData = () => {
         loading: false,
         error: errorMsg, // Só mostrar erro se for técnico
         hasMedidasExistentes,
-        liberado
+        liberado,
+        ultimaMedida
       };
       
       debugLog(`📊 Dados finais:`, {
@@ -276,13 +293,27 @@ export const useAnaliseCorpData = () => {
       
       setData(newData);
       
-      // Salvar no cache
+      // Salvar no cache APENAS se os dados estão completos e sem erro
       const cacheKey = `analise_corp_${user.id}`;
-      dataCache.set(cacheKey, {
-        data: newData,
-        timestamp: Date.now()
-      });
-      setSessionCache(cacheKey, newData);
+      const temDadosCompletos = dadosCorporais && fotos && !errorMsg;
+      
+      if (temDadosCompletos) {
+        debugLog(`💾 Salvando dados completos no cache`);
+        dataCache.set(cacheKey, {
+          data: newData,
+          timestamp: Date.now()
+        });
+        setSessionCache(cacheKey, newData);
+      } else {
+        debugLog(`⚠️ Dados incompletos - NÃO salvando no cache`, {
+          temDadosCorporais: !!dadosCorporais,
+          temFotos: !!fotos,
+          temErro: !!errorMsg
+        });
+        // Limpar cache inválido se existir
+        dataCache.delete(cacheKey);
+        sessionStorage.removeItem(cacheKey);
+      }
 
     } catch (error) {
       console.error('Erro técnico ao buscar dados para análise corporal:', error);
@@ -324,19 +355,52 @@ export const useAnaliseCorpData = () => {
     const sessionCached = getSessionCache(cacheKey);
     const now = Date.now();
 
+    // Função para validar integridade do cache
+    const validarCache = (cacheData: any) => {
+      setValidandoCache(true);
+      
+      if (!cacheData) {
+        setValidandoCache(false);
+        return false;
+      }
+      
+      // Verificar se tem os dados mínimos necessários
+      const temDadosMinimos = cacheData.dadosCorporais || cacheData.fotos || cacheData.hasMedidasExistentes;
+      
+      // Se não tem NENHUM dado, o cache está inválido
+      if (!temDadosMinimos) {
+        debugLog(`❌ Cache inválido - sem dados mínimos`);
+        setValidandoCache(false);
+        return false;
+      }
+      
+      // Se tem erro técnico, cache é inválido
+      if (cacheData.error && !cacheData.error.includes('não encontrad')) {
+        debugLog(`❌ Cache inválido - contém erro técnico`);
+        setValidandoCache(false);
+        return false;
+      }
+      
+      setValidandoCache(false);
+      return true;
+    };
+
     // Tentar cache em memória primeiro
-    if (cached && (now - cached.timestamp) < CACHE_DURATION) {
-      debugLog(`📦 Usando dados do cache em memória para userId: ${user.id}`);
+    if (cached && (now - cached.timestamp) < CACHE_DURATION && validarCache(cached.data)) {
+      debugLog(`📦 Usando dados válidos do cache em memória para userId: ${user.id}`);
       setData({
         ...cached.data,
         loading: false
       });
       return;
+    } else if (cached) {
+      debugLog(`🔄 Cache em memória inválido ou expirado - buscando novos dados`);
+      dataCache.delete(cacheKey);
     }
     
     // Tentar cache da sessão
-    if (sessionCached) {
-      debugLog(`💾 Usando dados do cache de sessão para userId: ${user.id}`);
+    if (sessionCached && validarCache(sessionCached)) {
+      debugLog(`💾 Usando dados válidos do cache de sessão para userId: ${user.id}`);
       setData({
         ...sessionCached,
         loading: false
@@ -347,6 +411,9 @@ export const useAnaliseCorpData = () => {
         timestamp: now
       });
       return;
+    } else if (sessionCached) {
+      debugLog(`🔄 Cache de sessão inválido - buscando novos dados`);
+      sessionStorage.removeItem(cacheKey);
     }
 
     // Se há uma promessa em execução, aguardar ela
@@ -397,6 +464,7 @@ export const useAnaliseCorpData = () => {
 
   return {
     ...data,
+    loading: data.loading || validandoCache,
     refetch,
     clearCache
   };

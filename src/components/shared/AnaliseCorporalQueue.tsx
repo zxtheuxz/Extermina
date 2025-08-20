@@ -13,8 +13,25 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Plus,
+  Camera,
+  FileText,
+  Zap
 } from 'lucide-react';
+import AnaliseCorpoMediaPipe from '../analise-corporal/AnaliseCorpoMediaPipe';
+import ResultadosAnalise from '../analise-corporal/ResultadosAnalise';
+import { normalizarAltura } from '../../utils/normalizarAltura';
+import { 
+  ResultadoAnalise,
+  classificarIndiceMassaMagra,
+  classificarIndiceMassaGorda,
+  classificarRazaoCinturaQuadril,
+  classificarRazaoCinturaEstatura,
+  classificarIndiceConicidade,
+  classificarCintura,
+  classificarQuadril
+} from '../../utils/calculosComposicaoCorporal';
 
 interface AnaliseCorpData {
   id: string;
@@ -52,16 +69,41 @@ interface AnaliseCorpData {
   calculado_automaticamente: boolean;
 }
 
+interface ClienteApto {
+  user_id: string;
+  nome_completo: string;
+  sexo: string;
+  foto_lateral_url: string;
+  foto_abertura_url: string;
+  altura: number;
+  peso: number;
+  data_avaliacao: string;
+  tipo_avaliacao: 'masculino' | 'feminino';
+}
+
+interface MedidasExtraidas {
+  bracos: number;
+  antebracos: number;
+  cintura: number;
+  quadril: number;
+  coxas: number;
+  panturrilhas: number;
+}
+
 interface AnaliseCorporalQueueProps {
-  userRole?: 'preparador' | 'nutricionista';
+  userRole?: 'preparador' | 'nutricionista' | 'admin';
 }
 
 export function AnaliseCorporalQueue({ userRole = 'preparador' }: AnaliseCorporalQueueProps) {
   const [analises, setAnalises] = useState<AnaliseCorpData[]>([]);
+  const [clientesAptos, setClientesAptos] = useState<ClienteApto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedAnalise, setSelectedAnalise] = useState<AnaliseCorpData | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [clienteSelecionado, setClienteSelecionado] = useState<ClienteApto | null>(null);
+  const [showAnaliseModal, setShowAnaliseModal] = useState(false);
+  const [processando, setProcessando] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAnalises();
@@ -71,6 +113,7 @@ export function AnaliseCorporalQueue({ userRole = 'preparador' }: AnaliseCorpora
     try {
       setLoading(true);
       
+      // Buscar análises existentes
       const { data: medidasData, error: medidasError } = await supabase
         .from('medidas_corporais')
         .select(`
@@ -102,54 +145,166 @@ export function AnaliseCorporalQueue({ userRole = 'preparador' }: AnaliseCorpora
 
       if (medidasError) throw medidasError;
 
-      // Buscar dados dos perfis
+      // Buscar clientes aptos (sem análise) - lógica do ClientesAptosCorporal
+      await buscarClientesAptos();
+
+      // Buscar dados dos perfis das análises existentes
       const userIds = medidasData?.map(m => m.user_id) || [];
-      const { data: perfisData, error: perfisError } = await supabase
-        .from('perfis')
-        .select('user_id, nome_completo, sexo')
-        .in('user_id', userIds);
+      if (userIds.length > 0) {
+        const { data: perfisData, error: perfisError } = await supabase
+          .from('perfis')
+          .select('user_id, nome_completo, sexo')
+          .in('user_id', userIds);
 
-      if (perfisError) throw perfisError;
+        if (perfisError) throw perfisError;
 
-      // Criar map de perfis
-      const perfisMap = new Map(perfisData?.map(p => [p.user_id, p]) || []);
+        // Criar map de perfis
+        const perfisMap = new Map(perfisData?.map(p => [p.user_id, p]) || []);
 
-      const formattedData = medidasData?.map(item => {
-        const perfil = perfisMap.get(item.user_id);
-        return {
-          id: item.id,
-          user_id: item.user_id,
-          nome_completo: perfil?.nome_completo || 'Nome não disponível',
-          sexo: perfil?.sexo || 'N/A',
-          created_at: item.created_at,
-          altura_usada: item.altura_usada,
-          peso_usado: item.peso_usado,
-          idade_calculada: item.idade_calculada,
-          imc: item.imc,
-          medida_bracos: item.medida_bracos,
-          medida_antebracos: item.medida_antebracos,
-          medida_cintura: item.medida_cintura,
-          medida_quadril: item.medida_quadril,
-          medida_coxas: item.medida_coxas,
-          medida_panturrilhas: item.medida_panturrilhas,
-          percentual_gordura: item.percentual_gordura,
-          massa_magra: item.massa_magra,
-          massa_gorda: item.massa_gorda,
-          tmb: item.tmb,
-          razao_cintura_quadril: item.razao_cintura_quadril,
-          razao_cintura_estatura: item.razao_cintura_estatura,
-          indice_conicidade: item.indice_conicidade,
-          shaped_score: item.shaped_score,
-          calculado_automaticamente: item.calculado_automaticamente
-        };
-      }) || [];
+        const formattedData = medidasData?.map(item => {
+          const perfil = perfisMap.get(item.user_id);
+          return {
+            id: item.id,
+            user_id: item.user_id,
+            nome_completo: perfil?.nome_completo || 'Nome não disponível',
+            sexo: perfil?.sexo || 'N/A',
+            created_at: item.created_at,
+            altura_usada: item.altura_usada,
+            peso_usado: item.peso_usado,
+            idade_calculada: item.idade_calculada,
+            imc: item.imc,
+            medida_bracos: item.medida_bracos,
+            medida_antebracos: item.medida_antebracos,
+            medida_cintura: item.medida_cintura,
+            medida_quadril: item.medida_quadril,
+            medida_coxas: item.medida_coxas,
+            medida_panturrilhas: item.medida_panturrilhas,
+            percentual_gordura: item.percentual_gordura,
+            massa_magra: item.massa_magra,
+            massa_gorda: item.massa_gorda,
+            tmb: item.tmb,
+            razao_cintura_quadril: item.razao_cintura_quadril,
+            razao_cintura_estatura: item.razao_cintura_estatura,
+            indice_conicidade: item.indice_conicidade,
+            shaped_score: item.shaped_score,
+            calculado_automaticamente: item.calculado_automaticamente
+          };
+        }) || [];
 
-      setAnalises(formattedData);
+        setAnalises(formattedData);
+      } else {
+        setAnalises([]);
+      }
     } catch (error) {
       console.error('Erro ao buscar análises corporais:', error);
       setError('Erro ao carregar análises corporais');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const buscarClientesAptos = async () => {
+    try {
+      // Buscar perfis com fotos
+      const { data: perfisComFotos, error: errorPerfis } = await supabase
+        .from('perfis')
+        .select('user_id, nome_completo, sexo, foto_lateral_url, foto_abertura_url')
+        .not('foto_lateral_url', 'is', null)
+        .not('foto_abertura_url', 'is', null);
+
+      if (errorPerfis) throw errorPerfis;
+
+      const userIdsComFotos = perfisComFotos?.map(p => p.user_id) || [];
+
+      // Buscar clientes com formulário masculino
+      const { data: clientesMasc, error: errorMasc } = await supabase
+        .from('avaliacao_nutricional')
+        .select('user_id, altura, peso, created_at')
+        .in('user_id', userIdsComFotos)
+        .order('created_at', { ascending: false });
+
+      // Buscar clientes com formulário feminino
+      const { data: clientesFem, error: errorFem } = await supabase
+        .from('avaliacao_nutricional_feminino')
+        .select('user_id, altura, peso, created_at')
+        .in('user_id', userIdsComFotos)
+        .order('created_at', { ascending: false });
+
+      if (errorMasc) throw errorMasc;
+      if (errorFem) throw errorFem;
+
+      // Criar map de perfis para acesso rápido
+      const perfisMap = new Map(perfisComFotos?.map(p => [p.user_id, p]) || []);
+
+      // Combinar e formatar os dados
+      const todosClientes: ClienteApto[] = [];
+
+      if (clientesMasc) {
+        clientesMasc.forEach(cliente => {
+          const perfil = perfisMap.get(cliente.user_id);
+          if (perfil) {
+            // Usa a função para normalizar altura para metros
+            const alturaEmMetros = normalizarAltura(cliente.altura);
+            
+            todosClientes.push({
+              user_id: cliente.user_id,
+              nome_completo: perfil.nome_completo,
+              sexo: perfil.sexo,
+              foto_lateral_url: perfil.foto_lateral_url,
+              foto_abertura_url: perfil.foto_abertura_url,
+              altura: alturaEmMetros,
+              peso: cliente.peso,
+              data_avaliacao: cliente.created_at,
+              tipo_avaliacao: 'masculino'
+            });
+          }
+        });
+      }
+
+      if (clientesFem) {
+        clientesFem.forEach(cliente => {
+          const perfil = perfisMap.get(cliente.user_id);
+          if (perfil) {
+            // Usa a função para normalizar altura para metros
+            const alturaEmMetros = normalizarAltura(cliente.altura);
+            
+            todosClientes.push({
+              user_id: cliente.user_id,
+              nome_completo: perfil.nome_completo,
+              sexo: perfil.sexo,
+              foto_lateral_url: perfil.foto_lateral_url,
+              foto_abertura_url: perfil.foto_abertura_url,
+              altura: alturaEmMetros,
+              peso: cliente.peso,
+              data_avaliacao: cliente.created_at,
+              tipo_avaliacao: 'feminino'
+            });
+          }
+        });
+      }
+
+      // Remover duplicatas (caso tenha preenchido ambos os formulários)
+      const clientesUnicos = todosClientes.reduce((acc, atual) => {
+        const existe = acc.find(c => c.user_id === atual.user_id);
+        if (!existe || new Date(atual.data_avaliacao) > new Date(existe.data_avaliacao)) {
+          return [...acc.filter(c => c.user_id !== atual.user_id), atual];
+        }
+        return acc;
+      }, [] as ClienteApto[]);
+
+      // Verificar quais já têm análise corporal gerada
+      const userIds = clientesUnicos.map(c => c.user_id);
+      const { data: analisesExistentes } = await supabase
+        .from('medidas_corporais')
+        .select('user_id')
+        .in('user_id', userIds);
+
+      const idsComAnalise = new Set(analisesExistentes?.map(a => a.user_id) || []);
+      const clientesSemAnalise = clientesUnicos.filter(c => !idsComAnalise.has(c.user_id));
+
+      setClientesAptos(clientesSemAnalise);
+    } catch (error) {
+      console.error('Erro ao buscar clientes aptos:', error);
     }
   };
 
@@ -184,6 +339,99 @@ export function AnaliseCorporalQueue({ userRole = 'preparador' }: AnaliseCorpora
     setShowModal(true);
   };
 
+  const handleGerarAnalise = (cliente: ClienteApto) => {
+    setClienteSelecionado(cliente);
+    setShowAnaliseModal(true);
+  };
+
+  const handleMedidasExtraidas = async (medidas: MedidasExtraidas) => {
+    if (!clienteSelecionado) return;
+
+    try {
+      setProcessando(clienteSelecionado.user_id);
+
+      // Calcular idade
+      const { data: perfil } = await supabase
+        .from('perfis')
+        .select('data_nascimento')
+        .eq('user_id', clienteSelecionado.user_id)
+        .single();
+
+      let idade = 30; // Default
+      if (perfil?.data_nascimento) {
+        const nascimento = new Date(perfil.data_nascimento);
+        const hoje = new Date();
+        idade = hoje.getFullYear() - nascimento.getFullYear();
+      }
+
+      // Calcular IMC
+      const imc = clienteSelecionado.peso / (clienteSelecionado.altura * clienteSelecionado.altura);
+
+      // Calcular percentual de gordura (fórmula simples)
+      const sexoMultiplicador = clienteSelecionado.sexo === 'masculino' ? 1.20 : 1.00;
+      const percentualGordura = (1.2 * imc) + (0.23 * idade) - (10.8 * sexoMultiplicador) - 5.4;
+
+      // Calcular composição corporal
+      const massaGorda = (percentualGordura / 100) * clienteSelecionado.peso;
+      const massaMagra = clienteSelecionado.peso - massaGorda;
+
+      // Calcular TMB
+      const tmb = clienteSelecionado.sexo === 'masculino'
+        ? 88.362 + (13.397 * clienteSelecionado.peso) + (4.799 * clienteSelecionado.altura * 100) - (5.677 * idade)
+        : 447.593 + (9.247 * clienteSelecionado.peso) + (3.098 * clienteSelecionado.altura * 100) - (4.330 * idade);
+
+      // Calcular índices
+      const razaoCinturaQuadril = medidas.cintura / medidas.quadril;
+      const razaoCinturaEstatura = medidas.cintura / (clienteSelecionado.altura * 100);
+      const indiceConicidade = medidas.cintura / (0.109 * Math.sqrt(clienteSelecionado.peso / clienteSelecionado.altura));
+      const shapedScore = (medidas.cintura + medidas.quadril) / 2;
+
+      // Salvar na tabela medidas_corporais
+      const { error: insertError } = await supabase
+        .from('medidas_corporais')
+        .insert({
+          user_id: clienteSelecionado.user_id,
+          altura_usada: clienteSelecionado.altura,
+          peso_usado: clienteSelecionado.peso,
+          idade_calculada: idade,
+          imc: imc,
+          medida_bracos: medidas.bracos,
+          medida_antebracos: medidas.antebracos,
+          medida_cintura: medidas.cintura,
+          medida_quadril: medidas.quadril,
+          medida_coxas: medidas.coxas,
+          medida_panturrilhas: medidas.panturrilhas,
+          percentual_gordura: percentualGordura,
+          massa_magra: massaMagra,
+          massa_gorda: massaGorda,
+          tmb: tmb,
+          razao_cintura_quadril: razaoCinturaQuadril,
+          razao_cintura_estatura: razaoCinturaEstatura,
+          indice_conicidade: indiceConicidade,
+          shaped_score: shapedScore,
+          calculado_automaticamente: true
+        });
+
+      if (insertError) throw insertError;
+
+      // Atualizar listas
+      await fetchAnalises();
+      setShowAnaliseModal(false);
+      setClienteSelecionado(null);
+    } catch (error) {
+      console.error('Erro ao salvar análise:', error);
+      setError('Erro ao salvar análise corporal');
+    } finally {
+      setProcessando(null);
+    }
+  };
+
+  const handleError = (errorMsg: string) => {
+    console.error('Erro na análise:', errorMsg);
+    setError(errorMsg);
+    setProcessando(null);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -207,7 +455,7 @@ export function AnaliseCorporalQueue({ userRole = 'preparador' }: AnaliseCorpora
     );
   }
 
-  if (analises.length === 0) {
+  if (analises.length === 0 && clientesAptos.length === 0) {
     return (
       <div className="text-center py-12">
         <Brain className="w-16 h-16 text-slate-300 mx-auto mb-4" />
@@ -225,14 +473,117 @@ export function AnaliseCorporalQueue({ userRole = 'preparador' }: AnaliseCorpora
           <h3 className="text-lg font-semibold text-slate-900">Análises Corporais Disponíveis</h3>
           <p className="text-sm text-slate-600">Análises automáticas processadas pelo sistema</p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-slate-600">
-          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-          <span>{analises.length} análises</span>
+        <div className="flex items-center gap-4 text-sm text-slate-600">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+            <span>{analises.length} análises processadas</span>
+          </div>
+          {clientesAptos.length > 0 && (
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+              <span>{clientesAptos.length} clientes aptos</span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Lista de análises */}
       <div className="grid gap-4">
+        {/* Clientes sem análise - mostrar primeiro */}
+        {clientesAptos.map((cliente) => (
+          <div
+            key={`cliente-${cliente.user_id}`}
+            className="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg p-6 hover:shadow-md transition-shadow"
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                {/* Cabeçalho do card */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-gradient-to-r from-orange-500 to-yellow-600 rounded-full flex items-center justify-center">
+                    <User className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-900">{cliente.nome_completo}</h4>
+                    <div className="flex items-center gap-4 text-sm text-slate-600">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
+                        {formatDate(cliente.data_avaliacao)}
+                      </span>
+                      <span className="capitalize">{cliente.sexo}</span>
+                      <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded-full text-xs font-medium">
+                        Apto para análise
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dados básicos */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                  <div className="bg-white/60 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Ruler className="w-4 h-4 text-slate-600" />
+                      <span className="text-xs font-medium text-slate-600 uppercase">Altura</span>
+                    </div>
+                    <span className="text-lg font-semibold text-slate-900">
+                      {(cliente.altura * 100).toFixed(0)} cm
+                    </span>
+                  </div>
+
+                  <div className="bg-white/60 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Scale className="w-4 h-4 text-slate-600" />
+                      <span className="text-xs font-medium text-slate-600 uppercase">Peso</span>
+                    </div>
+                    <span className="text-lg font-semibold text-slate-900">
+                      {cliente.peso.toFixed(1)} kg
+                    </span>
+                  </div>
+
+                  <div className="bg-white/60 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Target className="w-4 h-4 text-slate-600" />
+                      <span className="text-xs font-medium text-slate-600 uppercase">IMC</span>
+                    </div>
+                    <span className="text-lg font-semibold text-slate-900">
+                      {(cliente.peso / (cliente.altura * cliente.altura)).toFixed(1)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="text-slate-600">Fotos:</span>
+                  <span className="flex items-center gap-1 text-green-600">
+                    <CheckCircle className="w-4 h-4" />
+                    Lateral e frontal enviadas
+                  </span>
+                </div>
+              </div>
+
+              {/* Botão de ação */}
+              <div className="flex flex-col gap-2 ml-4">
+                <button
+                  onClick={() => handleGerarAnalise(cliente)}
+                  disabled={processando === cliente.user_id}
+                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-400 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  {processando === cliente.user_id ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Processando
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      Gerar Análise
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {/* Análises existentes */}
         {analises.map((analise) => {
           const imcClass = getIMCClassification(analise.imc);
           
@@ -345,17 +696,179 @@ export function AnaliseCorporalQueue({ userRole = 'preparador' }: AnaliseCorpora
       {/* Modal de detalhes */}
       {showModal && selectedAnalise && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-7xl w-full max-h-[95vh] overflow-hidden flex flex-col">
+            {/* Header fixo */}
+            <div className="p-6 border-b border-slate-200 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600">
+                    <Brain className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-slate-900">
+                      Análise Corporal Completa
+                    </h3>
+                    <div className="flex items-center gap-4 text-sm text-slate-600 mt-1">
+                      <span className="font-semibold">{selectedAnalise.nome_completo}</span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
+                        {formatDate(selectedAnalise.created_at)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Activity className="w-4 h-4" />
+                        {selectedAnalise.idade_calculada} anos
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <XCircle className="w-6 h-6 text-slate-600" />
+                </button>
+              </div>
+            </div>
+
+            {/* Corpo com scroll */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-6">
+                {/* Usar o componente ResultadosAnalise com os dados da análise selecionada */}
+                {(() => {
+                  // Calcular valores dos índices
+                  const indiceMassaMagra = selectedAnalise.massa_magra / Math.pow(selectedAnalise.altura_usada, 2);
+                  const indiceMassaGorda = selectedAnalise.massa_gorda / Math.pow(selectedAnalise.altura_usada, 2);
+                  const sexo = selectedAnalise.sexo as 'M' | 'F';
+                  
+                  // Classificar todos os indicadores usando as funções importadas
+                  const classIMM = classificarIndiceMassaMagra(indiceMassaMagra, sexo);
+                  const classIMG = classificarIndiceMassaGorda(indiceMassaGorda);
+                  const classRCQ = classificarRazaoCinturaQuadril(selectedAnalise.razao_cintura_quadril, sexo);
+                  const classRCE = classificarRazaoCinturaEstatura(selectedAnalise.razao_cintura_estatura);
+                  const classIC = classificarIndiceConicidade(selectedAnalise.indice_conicidade);
+                  const classCintura = classificarCintura(selectedAnalise.medida_cintura, sexo);
+                  const classQuadril = classificarQuadril(selectedAnalise.medida_quadril, sexo);
+                  
+                  return (
+                    <ResultadosAnalise 
+                      resultado={{
+                        composicao: {
+                          percentualGordura: selectedAnalise.percentual_gordura,
+                          massaGorda: selectedAnalise.massa_gorda,
+                          massaMagra: selectedAnalise.massa_magra,
+                          tmb: selectedAnalise.tmb,
+                          imc: selectedAnalise.imc,
+                          aguaCorporal: selectedAnalise.massa_magra * 0.723,
+                          aguaCorporalPercentual: (selectedAnalise.massa_magra * 0.723 / selectedAnalise.peso_usado) * 100
+                        },
+                        indices: {
+                          indiceGrimaldi: selectedAnalise.shaped_score,
+                          razaoCinturaQuadril: {
+                            valor: selectedAnalise.razao_cintura_quadril,
+                            faixa: classRCQ.faixa,
+                            descricao: classRCQ.descricao
+                          },
+                          razaoCinturaEstatura: {
+                            valor: selectedAnalise.razao_cintura_estatura,
+                            faixa: classRCE.faixa,
+                            descricao: classRCE.descricao
+                          },
+                          indiceConicidade: {
+                            valor: selectedAnalise.indice_conicidade,
+                            faixa: classIC.faixa,
+                            descricao: classIC.descricao
+                          },
+                          indiceMassaMagra: {
+                            valor: indiceMassaMagra,
+                            faixa: classIMM.faixa,
+                            descricao: classIMM.descricao
+                          },
+                          indiceMassaGorda: {
+                            valor: indiceMassaGorda,
+                            faixa: classIMG.faixa,
+                            descricao: classIMG.descricao
+                          },
+                          cintura: {
+                            valor: selectedAnalise.medida_cintura,
+                            faixa: classCintura.faixa,
+                            descricao: classCintura.descricao
+                          },
+                          quadril: {
+                            valor: selectedAnalise.medida_quadril,
+                            faixa: classQuadril.faixa,
+                            descricao: classQuadril.descricao
+                          }
+                        },
+                    medidas: {
+                      bracos: selectedAnalise.medida_bracos,
+                      antebracos: selectedAnalise.medida_antebracos,
+                      cintura: selectedAnalise.medida_cintura,
+                      quadril: selectedAnalise.medida_quadril,
+                      coxas: selectedAnalise.medida_coxas,
+                      panturrilhas: selectedAnalise.medida_panturrilhas
+                    },
+                        perfil: {
+                          altura: selectedAnalise.altura_usada,
+                          peso: selectedAnalise.peso_usado,
+                          idade: selectedAnalise.idade_calculada,
+                          sexo: selectedAnalise.sexo as 'M' | 'F'
+                        }
+                      }}
+                    />
+                  );
+                })()}
+
+                {/* Informações adicionais para admin */}
+                <div className="mt-8 p-6 bg-slate-50 rounded-lg">
+                  <h4 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    Informações Administrativas
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-slate-600">ID do usuário</p>
+                      <p className="font-mono text-sm">{selectedAnalise.user_id}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-600">ID da análise</p>
+                      <p className="font-mono text-sm">{selectedAnalise.id}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-600">Processamento</p>
+                      <p className="flex items-center gap-1 text-sm">
+                        {selectedAnalise.calculado_automaticamente ? (
+                          <><Zap className="w-4 h-4 text-blue-600" /> Automático (MediaPipe)</>
+                        ) : (
+                          <><User className="w-4 h-4 text-gray-600" /> Manual</>
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-600">Data/Hora</p>
+                      <p className="text-sm">{formatDate(selectedAnalise.created_at)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de análise corporal */}
+      {showAnaliseModal && clienteSelecionado && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-200">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-xl font-semibold text-slate-900">
-                    Análise Corporal Detalhada
+                    Gerar Análise Corporal
                   </h3>
-                  <p className="text-slate-600">{selectedAnalise.nome_completo}</p>
+                  <p className="text-slate-600">{clienteSelecionado.nome_completo}</p>
                 </div>
                 <button
-                  onClick={() => setShowModal(false)}
+                  onClick={() => setShowAnaliseModal(false)}
                   className="p-2 hover:bg-slate-100 rounded-lg"
                 >
                   <XCircle className="w-5 h-5 text-slate-600" />
@@ -364,84 +877,15 @@ export function AnaliseCorporalQueue({ userRole = 'preparador' }: AnaliseCorpora
             </div>
 
             <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Medidas Corporais */}
-                <div>
-                  <h4 className="font-semibold text-slate-900 mb-4">Medidas Corporais (cm)</h4>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                      <span className="text-slate-600">Braços</span>
-                      <span className="font-medium">{selectedAnalise.medida_bracos.toFixed(1)} cm</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                      <span className="text-slate-600">Antebraços</span>
-                      <span className="font-medium">{selectedAnalise.medida_antebracos.toFixed(1)} cm</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                      <span className="text-slate-600">Cintura</span>
-                      <span className="font-medium">{selectedAnalise.medida_cintura.toFixed(1)} cm</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                      <span className="text-slate-600">Quadril</span>
-                      <span className="font-medium">{selectedAnalise.medida_quadril.toFixed(1)} cm</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                      <span className="text-slate-600">Coxas</span>
-                      <span className="font-medium">{selectedAnalise.medida_coxas.toFixed(1)} cm</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2">
-                      <span className="text-slate-600">Panturrilhas</span>
-                      <span className="font-medium">{selectedAnalise.medida_panturrilhas.toFixed(1)} cm</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Composição Corporal */}
-                <div>
-                  <h4 className="font-semibold text-slate-900 mb-4">Composição Corporal</h4>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                      <span className="text-slate-600">Percentual de Gordura</span>
-                      <span className="font-medium">{selectedAnalise.percentual_gordura.toFixed(1)}%</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                      <span className="text-slate-600">Massa Magra</span>
-                      <span className="font-medium">{selectedAnalise.massa_magra.toFixed(1)} kg</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                      <span className="text-slate-600">Massa Gorda</span>
-                      <span className="font-medium">{selectedAnalise.massa_gorda.toFixed(1)} kg</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                      <span className="text-slate-600">TMB</span>
-                      <span className="font-medium">{selectedAnalise.tmb.toFixed(0)} kcal</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2">
-                      <span className="text-slate-600">IMC</span>
-                      <span className="font-medium">{selectedAnalise.imc.toFixed(1)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Índices de Risco */}
-                <div className="md:col-span-2">
-                  <h4 className="font-semibold text-slate-900 mb-4">Índices de Risco</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-slate-50 rounded-lg p-4">
-                      <div className="text-sm text-slate-600 mb-1">Razão Cintura/Quadril</div>
-                      <div className="text-lg font-semibold text-slate-900">{selectedAnalise.razao_cintura_quadril.toFixed(2)}</div>
-                    </div>
-                    <div className="bg-slate-50 rounded-lg p-4">
-                      <div className="text-sm text-slate-600 mb-1">Razão Cintura/Estatura</div>
-                      <div className="text-lg font-semibold text-slate-900">{selectedAnalise.razao_cintura_estatura.toFixed(2)}</div>
-                    </div>
-                    <div className="bg-slate-50 rounded-lg p-4">
-                      <div className="text-sm text-slate-600 mb-1">Shaped Score</div>
-                      <div className="text-lg font-semibold text-slate-900">{selectedAnalise.shaped_score.toFixed(1)}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <AnaliseCorpoMediaPipe
+                fotoLateralUrl={clienteSelecionado.foto_lateral_url}
+                fotoAberturaUrl={clienteSelecionado.foto_abertura_url}
+                alturaReal={clienteSelecionado.altura}
+                peso={clienteSelecionado.peso}
+                sexo={clienteSelecionado.sexo === 'masculino' ? 'M' : 'F'}
+                onMedidasExtraidas={handleMedidasExtraidas}
+                onError={handleError}
+              />
             </div>
           </div>
         </div>

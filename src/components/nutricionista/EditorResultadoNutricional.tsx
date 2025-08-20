@@ -1,5 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, FileText, Eye, Undo2, Copy, Check, ChefHat, Salad } from 'lucide-react';
+import { X, Save, FileText, Eye, Undo2, Copy, Check, ChefHat, Salad, FileStack, Search, Apple, Utensils } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+
+// Mapeamento de IDs para nomes descritivos
+const TIPO_DIETA_MAP: Record<number, string> = {
+  1: 'Emagrecimento',
+  2: 'Ganho de Massa Muscular'
+};
+
+const VALOR_CALORICO_MAP: Record<number, string> = {
+  1: '1200 kcal',
+  2: '1300 kcal',
+  3: '1400 kcal',
+  4: '1500 kcal',
+  5: '1600 kcal',
+  6: '1700 kcal',
+  7: '1800 kcal',
+  8: '1900 kcal',
+  9: '2000 kcal',
+  10: '2200 kcal',
+  11: '2300 kcal',
+  12: '2400 kcal',
+  13: '2500 kcal',
+  14: '2600 kcal',
+  15: '2700 kcal',
+  16: '2800 kcal',
+  17: '2900 kcal',
+  18: '3000 kcal',
+  19: '3100 kcal',
+  20: '4200 kcal'
+};
 
 interface AvaliacaoNutricional {
   id: string;
@@ -35,19 +65,88 @@ export function EditorResultadoNutricional({
   onSave 
 }: EditorResultadoNutricionalProps) {
   const [conteudo, setConteudo] = useState('');
+  const [conteudoOriginal, setConteudoOriginal] = useState('');
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [searchTemplate, setSearchTemplate] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
 
   useEffect(() => {
     if (avaliacao) {
-      setConteudo(avaliacao.resultado_editado || avaliacao.resultado_original || '');
+      loadResultadoNutricional();
+      loadTemplates();
     }
   }, [avaliacao]);
+
+  const loadResultadoNutricional = async () => {
+    try {
+      setLoading(true);
+      // Buscar o resultado_nutricional da tabela perfis
+      const { data, error } = await supabase
+        .from('perfis')
+        .select('resultado_nutricional')
+        .eq('user_id', avaliacao.user_id)
+        .single();
+
+      if (error) {
+        console.error('Erro ao buscar resultado nutricional:', error);
+        return;
+      }
+
+      const resultado = data.resultado_nutricional || '';
+      setConteudo(resultado);
+      setConteudoOriginal(resultado);
+    } catch (error) {
+      console.error('Erro ao carregar resultado:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('templates_dietas')
+        .select('*')
+        .order('tipo_id', { ascending: true })
+        .order('valor_calorico_id', { ascending: true });
+
+      if (error) {
+        console.error('Erro ao carregar templates:', error);
+        return;
+      }
+
+      setTemplates(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar templates:', error);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Salvar o resultado_nutricional na tabela perfis com data de edição
+      const { error: perfilError } = await supabase
+        .from('perfis')
+        .update({ 
+          resultado_nutricional: conteudo,
+          resultado_nutricional_editado_em: new Date().toISOString()
+        })
+        .eq('user_id', avaliacao.user_id);
+
+      if (perfilError) {
+        console.error('Erro ao salvar resultado nutricional:', perfilError);
+        alert('Erro ao salvar o resultado. Tente novamente.');
+        return;
+      }
+
+      console.log('Resultado nutricional salvo com sucesso na tabela perfis');
+      
+      // Chamar a função original para atualizar o status se necessário
       await onSave(avaliacao.id, conteudo);
     } catch (error) {
       console.error('Erro ao salvar:', error);
@@ -62,8 +161,15 @@ export function EditorResultadoNutricional({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const resetToOriginal = () => {
-    setConteudo(avaliacao.resultado_original || '');
+  const resetToOriginal = async () => {
+    // Recarregar o resultado original da tabela perfis
+    await loadResultadoNutricional();
+  };
+
+  const applyTemplate = (template: any) => {
+    setConteudo(template.conteudo);
+    setShowTemplateSelector(false);
+    setSearchTemplate('');
   };
 
   const insertTemplate = (template: string) => {
@@ -91,6 +197,13 @@ export function EditorResultadoNutricional({
   const getTipoColor = () => {
     return avaliacao.tipo_avaliacao === 'masculino' ? 'from-blue-600 to-indigo-700' : 'from-pink-600 to-rose-700';
   };
+
+  const filteredTemplates = templates.filter(template => {
+    const tipo = TIPO_DIETA_MAP[template.tipo_id] || `Tipo ${template.tipo_id}`;
+    const valorCalorico = VALOR_CALORICO_MAP[template.valor_calorico_id] || `${template.valor_calorico_id} kcal`;
+    const searchText = `${tipo} ${valorCalorico}`.toLowerCase();
+    return searchText.includes(searchTemplate.toLowerCase());
+  });
 
   if (!isOpen) return null;
 
@@ -143,6 +256,14 @@ export function EditorResultadoNutricional({
               >
                 <Undo2 className="w-4 h-4" />
                 Restaurar Original
+              </button>
+              
+              <button
+                onClick={() => setShowTemplateSelector(!showTemplateSelector)}
+                className="px-3 py-1.5 text-sm font-medium rounded-md bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 transition-colors flex items-center gap-2"
+              >
+                <FileStack className="w-4 h-4" />
+                Usar Template
               </button>
               
               <button
@@ -201,11 +322,192 @@ export function EditorResultadoNutricional({
               Importante
             </button>
           </div>
+
+          {/* Template Selector Modal */}
+          {showTemplateSelector && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col">
+                {/* Header */}
+                <div className="p-6 border-b border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-amber-100 rounded-lg">
+                        <FileStack className="w-6 h-6 text-amber-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-gray-900">Templates de Dieta</h3>
+                        <p className="text-sm text-gray-600">Escolha um template para aplicar</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowTemplateSelector(false);
+                        setSearchTemplate('');
+                      }}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5 text-gray-500" />
+                    </button>
+                  </div>
+                  
+                  {/* Search Bar */}
+                  <div className="mt-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Buscar por tipo ou valor calórico..."
+                        value={searchTemplate}
+                        onChange={(e) => setSearchTemplate(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Templates Grid */}
+                <div className="flex-1 overflow-y-auto p-6">
+                  {/* Grupo: Emagrecimento */}
+                  {filteredTemplates.filter(t => t.tipo_id === 1).length > 0 && (
+                    <div className="mb-8">
+                      <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <Apple className="w-5 h-5 text-green-600" />
+                        Emagrecimento
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filteredTemplates
+                          .filter(template => template.tipo_id === 1)
+                          .map((template) => {
+                            const valorCalorico = VALOR_CALORICO_MAP[template.valor_calorico_id] || `${template.valor_calorico_id} kcal`;
+                            
+                            return (
+                              <div
+                                key={template.id}
+                                className="border border-gray-200 rounded-lg p-4 hover:border-amber-300 hover:shadow-md transition-all bg-white"
+                              >
+                                <div className="flex items-start justify-between mb-3">
+                                  <div>
+                                    <h5 className="text-base font-semibold text-gray-900">
+                                      {valorCalorico}
+                                    </h5>
+                                    <p className="text-sm text-gray-600">Plano para emagrecimento</p>
+                                  </div>
+                                  <div className="text-2xl">🥗</div>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                  <button
+                                    onClick={() => applyTemplate(template)}
+                                    className="w-full px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                                  >
+                                    Aplicar Template
+                                  </button>
+                                  
+                                  {/* Preview Toggle */}
+                                  <button
+                                    onClick={() => setSelectedTemplate(template.id === selectedTemplate?.id ? null : template)}
+                                    className="w-full px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded-lg transition-colors flex items-center justify-center gap-1"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                    {template.id === selectedTemplate?.id ? 'Ocultar' : 'Ver'} Preview
+                                  </button>
+                                </div>
+                                
+                                {/* Preview Content */}
+                                {selectedTemplate?.id === template.id && (
+                                  <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                                    <p className="text-xs text-gray-600 line-clamp-4">
+                                      {template.conteudo.substring(0, 300)}...
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Grupo: Ganho de Massa Muscular */}
+                  {filteredTemplates.filter(t => t.tipo_id === 2).length > 0 && (
+                    <div>
+                      <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <Utensils className="w-5 h-5 text-orange-600" />
+                        Ganho de Massa Muscular
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filteredTemplates
+                          .filter(template => template.tipo_id === 2)
+                          .map((template) => {
+                            const valorCalorico = VALOR_CALORICO_MAP[template.valor_calorico_id] || `${template.valor_calorico_id} kcal`;
+                            
+                            return (
+                              <div
+                                key={template.id}
+                                className="border border-gray-200 rounded-lg p-4 hover:border-amber-300 hover:shadow-md transition-all bg-white"
+                              >
+                                <div className="flex items-start justify-between mb-3">
+                                  <div>
+                                    <h5 className="text-base font-semibold text-gray-900">
+                                      {valorCalorico}
+                                    </h5>
+                                    <p className="text-sm text-gray-600">Plano para hipertrofia</p>
+                                  </div>
+                                  <div className="text-2xl">💪</div>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                  <button
+                                    onClick={() => applyTemplate(template)}
+                                    className="w-full px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
+                                  >
+                                    Aplicar Template
+                                  </button>
+                                  
+                                  {/* Preview Toggle */}
+                                  <button
+                                    onClick={() => setSelectedTemplate(template.id === selectedTemplate?.id ? null : template)}
+                                    className="w-full px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded-lg transition-colors flex items-center justify-center gap-1"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                    {template.id === selectedTemplate?.id ? 'Ocultar' : 'Ver'} Preview
+                                  </button>
+                                </div>
+                                
+                                {/* Preview Content */}
+                                {selectedTemplate?.id === template.id && (
+                                  <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                                    <p className="text-xs text-gray-600 line-clamp-4">
+                                      {template.conteudo.substring(0, 300)}...
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {filteredTemplates.length === 0 && (
+                    <div className="text-center py-12">
+                      <FileStack className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600">Nenhum template encontrado</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Content Area */}
         <div className="flex-1 overflow-hidden">
-          {showPreview ? (
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-600"></div>
+            </div>
+          ) : showPreview ? (
             <div className="h-full overflow-y-auto p-6">
               <div className="prose prose-sm max-w-none">
                 <div 
@@ -252,7 +554,7 @@ export function EditorResultadoNutricional({
               </button>
               <button
                 onClick={handleSave}
-                disabled={saving || conteudo === (avaliacao.resultado_editado || avaliacao.resultado_original)}
+                disabled={saving || conteudo === conteudoOriginal}
                 className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
               >
                 {saving ? (

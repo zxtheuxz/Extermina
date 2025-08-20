@@ -1,7 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { X, User, Activity, Utensils, Clock, ChevronDown, ChevronRight, AlertCircle, CheckCircle2, XCircle, Heart, Zap, Calendar, Phone, Mail, MapPin, Image, Camera, FileCheck, Download, FileText } from 'lucide-react';
+import { X, User, Activity, Utensils, Clock, ChevronDown, ChevronRight, AlertCircle, CheckCircle2, XCircle, Heart, Zap, Calendar, Phone, Mail, MapPin, Image, Camera, FileCheck, Download, FileText, Brain } from 'lucide-react';
 import { ResumoExecutivo } from './ResumoExecutivo';
+import ResultadosAnalise from './analise-corporal/ResultadosAnalise';
+import { 
+  ResultadoAnalise,
+  MedidasCorporais,
+  PerfilUsuario,
+  ComposicaoCorporal,
+  IndicesRisco,
+  classificarIndiceMassaMagra,
+  classificarIndiceMassaGorda,
+  classificarRazaoCinturaQuadril,
+  classificarRazaoCinturaEstatura,
+  classificarIndiceConicidade,
+  classificarCintura,
+  classificarQuadril
+} from '../utils/calculosComposicaoCorporal';
+import { normalizarAltura } from '../utils/normalizarAltura';
 
 interface Cliente {
   id: string;
@@ -101,7 +117,7 @@ interface ClienteDetailModalProps {
 }
 
 export function ClienteDetailModal({ cliente, isOpen, onClose }: ClienteDetailModalProps) {
-  const [activeTab, setActiveTab] = useState<'resumo' | 'fisica' | 'nutricional' | 'geral' | 'fotos'>('resumo');
+  const [activeTab, setActiveTab] = useState<'resumo' | 'fisica' | 'nutricional' | 'geral' | 'fotos' | 'corporal'>('resumo');
   const [expandedSections, setExpandedSections] = useState<{[key: string]: boolean}>({});
   const [loading, setLoading] = useState(false);
   const [avaliacaoFisica, setAvaliacaoFisica] = useState<AvaliacaoFisica | null>(null);
@@ -109,6 +125,8 @@ export function ClienteDetailModal({ cliente, isOpen, onClose }: ClienteDetailMo
   const [perfilFotos, setPerfilFotos] = useState<PerfilFotos | null>(null);
   const [laudos, setLaudos] = useState<LaudoMedico[]>([]);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const [analiseCorporal, setAnaliseCorporal] = useState<any[]>([]);
+  const [analiseCorporalFormatada, setAnaliseCorporalFormatada] = useState<ResultadoAnalise | null>(null);
 
   useEffect(() => {
     if (isOpen && cliente) {
@@ -269,11 +287,99 @@ export function ClienteDetailModal({ cliente, isOpen, onClose }: ClienteDetailMo
         setLaudos(laudosData || []);
       }
 
+      // Buscar análise corporal COMPLETA
+      console.log('=== BUSCANDO ANÁLISE CORPORAL COMPLETA ===');
+      const { data: analiseCorporalData, error: analiseCorporalError } = await supabase
+        .from('medidas_corporais')
+        .select('*')
+        .eq('user_id', cliente.user_id)
+        .order('created_at', { ascending: false });
+
+      if (analiseCorporalError) {
+        console.error('Erro ao buscar análise corporal:', analiseCorporalError);
+      } else {
+        console.log('=== Análises corporais encontradas:', analiseCorporalData?.length || 0);
+        // Adicionar o sexo do cliente em cada análise (já disponível)
+        const analisesComSexo = analiseCorporalData?.map(analise => ({
+          ...analise,
+          sexo: cliente.sexo || 'M'
+        }));
+        setAnaliseCorporal(analisesComSexo || []);
+        
+        // Formatar a análise mais recente para exibição
+        if (analisesComSexo && analisesComSexo.length > 0) {
+          const analiseMaisRecente = analisesComSexo[0];
+          const resultadoFormatado = formatarAnaliseParaResultado(analiseMaisRecente);
+          setAnaliseCorporalFormatada(resultadoFormatado);
+        }
+      }
+
     } catch (error) {
       console.error('Erro geral ao carregar detalhes do cliente:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Função para formatar dados da análise corporal do banco para o formato ResultadoAnalise
+  const formatarAnaliseParaResultado = (analise: any): ResultadoAnalise => {
+    // Converter sexo para formato esperado
+    const sexo = analise.sexo_usado || analise.sexo || 'M';
+    const sexoFormatado = sexo === 'feminino' ? 'F' : sexo === 'masculino' ? 'M' : sexo;
+    
+    // Criar perfil do usuário
+    const perfil: PerfilUsuario = {
+      altura: normalizarAltura(analise.altura_usada || 170), // Usa a função para normalizar
+      peso: analise.peso_usado || 70,
+      idade: analise.idade_calculada || 30,
+      sexo: sexoFormatado as 'M' | 'F'
+    };
+    
+    // Criar medidas corporais
+    const medidas: MedidasCorporais = {
+      bracos: analise.medida_bracos || 0,
+      antebracos: analise.medida_antebracos || 0,
+      cintura: analise.medida_cintura || 0,
+      quadril: analise.medida_quadril || 0,
+      coxas: analise.medida_coxas || 0,
+      panturrilhas: analise.medida_panturrilhas || 0
+    };
+    
+    // Criar composição corporal
+    const composicao: ComposicaoCorporal = {
+      percentualGordura: analise.percentual_gordura || 0,
+      massaGorda: analise.massa_gorda || 0,
+      massaMagra: analise.massa_magra || 0,
+      tmb: analise.tmb || 0,
+      imc: analise.imc || 0,
+      aguaCorporal: (analise.massa_magra || 0) * 0.73, // Cálculo padrão
+      aguaCorporalPercentual: ((analise.massa_magra || 0) * 0.73 / (analise.peso_usado || 70)) * 100
+    };
+    
+    // Usar valores já calculados do banco ou calcular se não existirem
+    const indiceMassaMagra = analise.indice_massa_magra || (composicao.massaMagra / Math.pow(perfil.altura, 2));
+    const indiceMassaGorda = analise.indice_massa_gorda || (composicao.massaGorda / Math.pow(perfil.altura, 2));
+    const razaoCinturaQuadril = analise.razao_cintura_quadril || (medidas.cintura / medidas.quadril);
+    const razaoCinturaEstatura = analise.razao_cintura_estatura || (medidas.cintura / (perfil.altura * 100));
+    const indiceConicidade = analise.indice_conicidade || ((medidas.cintura / 100) / (0.109 * Math.sqrt(perfil.peso / perfil.altura)));
+    
+    const indices: IndicesRisco = {
+      razaoCinturaQuadril: classificarRazaoCinturaQuadril(razaoCinturaQuadril, perfil.sexo),
+      razaoCinturaEstatura: classificarRazaoCinturaEstatura(razaoCinturaEstatura),
+      indiceConicidade: classificarIndiceConicidade(indiceConicidade),
+      indiceMassaMagra: classificarIndiceMassaMagra(indiceMassaMagra, perfil.sexo),
+      indiceMassaGorda: classificarIndiceMassaGorda(indiceMassaGorda),
+      cintura: classificarCintura(medidas.cintura, perfil.sexo),
+      quadril: classificarQuadril(medidas.quadril, perfil.sexo),
+      indiceGrimaldi: analise.shaped_score || 0
+    };
+    
+    return {
+      composicao,
+      indices,
+      medidas,
+      perfil
+    };
   };
 
   const formatDate = (dateString: string) => {
@@ -289,8 +395,8 @@ export function ClienteDetailModal({ cliente, isOpen, onClose }: ClienteDetailMo
 
   const calculateIMC = (peso: number, altura: number) => {
     if (!peso || !altura) return 'N/A';
-    // Se altura for menor que 10, assumir que está em metros, senão em centímetros
-    const alturaMetros = altura < 10 ? altura : altura / 100;
+    // Usa a função para normalizar altura para metros
+    const alturaMetros = normalizarAltura(altura);
     const imc = peso / (alturaMetros * alturaMetros);
     return imc.toFixed(1);
   };
@@ -311,7 +417,8 @@ export function ClienteDetailModal({ cliente, isOpen, onClose }: ClienteDetailMo
     { id: 'fisica', label: 'Avaliação Física', icon: Activity },
     { id: 'nutricional', label: 'Avaliação Nutricional', icon: Utensils },
     { id: 'geral', label: 'Dados Gerais', icon: User },
-    { id: 'fotos', label: 'Fotos e Laudos', icon: Image }
+    { id: 'fotos', label: 'Fotos e Laudos', icon: Image },
+    { id: 'corporal', label: 'Análise Corporal', icon: Brain }
   ];
 
   const toggleSection = (sectionId: string) => {
@@ -1241,6 +1348,24 @@ export function ClienteDetailModal({ cliente, isOpen, onClose }: ClienteDetailMo
                 </div>
               )}
 
+              {/* Tab Análise Corporal */}
+              {activeTab === 'corporal' && (
+                <div className="space-y-6">
+                  {analiseCorporalFormatada ? (
+                    <ResultadosAnalise resultado={analiseCorporalFormatada} />
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Brain className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h4 className="text-lg font-semibold text-gray-900 mb-2">Nenhuma análise corporal encontrada</h4>
+                      <p className="text-gray-600 max-w-md mx-auto">
+                        O cliente ainda não possui análise corporal. Solicite que faça o envio das fotos para análise.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
             </>
           )}

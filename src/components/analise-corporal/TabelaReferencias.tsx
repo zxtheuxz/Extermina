@@ -26,7 +26,7 @@ const TabelaReferencias: React.FC<TabelaReferenciasProps> = ({ dados, className 
     return [
       {
         indicador: 'Índice de massa gorda',
-        referencia: '< 5,9 kg/m²',
+        referencia: '< 4,4 kg/m²',
         atual: `${dados.indices.indiceMassaGorda.valor.toFixed(1)} kg/m²`,
         // Usar a mesma classificação do sistema principal
         status: dados.indices.indiceMassaGorda.faixa === 'BAIXO_RISCO' ? 'adequado' :
@@ -36,7 +36,7 @@ const TabelaReferencias: React.FC<TabelaReferenciasProps> = ({ dados, className 
       },
       {
         indicador: 'Índice de massa magra',
-        referencia: sexo === 'M' ? '> 17,8 kg/m²' : '> 14,1 kg/m²',
+        referencia: sexo === 'M' ? '> 17,8 kg/m²' : '> 14,8 kg/m²',
         atual: `${dados.indices.indiceMassaMagra.valor.toFixed(1)} kg/m²`,
         // Usar a mesma classificação do sistema principal
         status: dados.indices.indiceMassaMagra.faixa === 'ADEQUADO' ? 'adequado' : 

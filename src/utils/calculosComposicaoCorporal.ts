@@ -448,7 +448,7 @@ export const calcularIndicesRisco = (
   // Cálculos de índices e classificações
   const razaoCinturaQuadril = medidas.cintura / medidas.quadril;
   const razaoCinturaEstatura = medidas.cintura / alturaCm;
-  const indiceConicidade = (medidas.cintura / 100) / (0.109 * Math.sqrt((perfil.peso) / (altura)));
+  const indiceConicidade = (medidas.cintura / 100) / (0.109 * Math.sqrt(perfil.peso / altura));
   const indiceMassaMagra = composicao.massaMagra / Math.pow(altura, 2);
   const indiceMassaGorda = composicao.massaGorda / Math.pow(altura, 2);
 

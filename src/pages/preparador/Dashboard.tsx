@@ -5,7 +5,6 @@ import { User } from '@supabase/supabase-js';
 import { Target, Users, FileCheck, TrendingUp, Clock, BarChart3, AlertCircle, CheckCircle, Activity, Calendar, LogOut, Pill, Dumbbell, Brain } from 'lucide-react';
 import { AnalisesQueue } from '../../components/AnalisesQueue';
 import { AvaliacoesFisicasQueue } from '../../components/preparador/AvaliacoesFisicasQueue';
-import { AnaliseCorporalQueue } from '../../components/shared/AnaliseCorporalQueue';
 
 interface Perfil {
   nome_completo?: string;
@@ -17,7 +16,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
-  const [activeTab, setActiveTab] = useState<'medicamentos' | 'fisicas' | 'corporal'>('fisicas');
+  const [activeTab, setActiveTab] = useState<'medicamentos' | 'fisicas'>('fisicas');
   const [stats, setStats] = useState({
     clientesAtivos: 0,
     avaliacoesPendentes: 0,
@@ -131,156 +130,144 @@ export function Dashboard() {
     <div className="min-h-screen bg-green-50">
       {/* Header Preparador */}
       <header className="bg-white shadow-sm border-b border-green-200">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center">
-              <div className="w-10 h-10 bg-gradient-to-r from-green-600 to-teal-700 rounded-xl flex items-center justify-center mr-3">
-                <Target className="w-5 h-5 text-white" />
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-green-600 to-teal-700 rounded-xl flex items-center justify-center mr-2 sm:mr-3">
+                <Target className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-slate-900">
+                <h1 className="text-base sm:text-xl font-bold text-slate-900">
                   Preparador Dashboard
                 </h1>
-                <p className="text-sm text-slate-600">
+                <p className="text-xs sm:text-sm text-slate-600 hidden sm:block">
                   Bem-vindo, {getNomePreparador()}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="hidden sm:flex items-center gap-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 <span className="text-xs text-slate-600">Ativo</span>
               </div>
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
               >
-                <LogOut className="w-4 h-4" />
-                Sair
+                <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Sair</span>
               </button>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="px-4 py-8">
+      <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         <div className="max-w-7xl mx-auto">
           
           {/* Status Info */}
-          <div className="mb-8">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span className="text-sm text-slate-600">Status: Ativo</span>
-              <span className="text-xs text-slate-400 ml-2">
+          <div className="mb-4 sm:mb-8">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded-full"></div>
+              <span className="text-xs sm:text-sm text-slate-600">Status: Ativo</span>
+              <span className="text-xs text-slate-400 ml-2 hidden sm:inline">
                 Última atualização: {new Date().toLocaleTimeString()}
               </span>
             </div>
           </div>
 
           {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
-            <div className="bg-white rounded-xl shadow-sm border border-green-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Clientes Ativos</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.clientesAtivos}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-6 mb-6 sm:mb-8">
+            <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-green-200 p-3 sm:p-4 lg:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex-1">
+                  <p className="text-xs sm:text-sm font-medium text-slate-600 truncate">Clientes Ativos</p>
+                  <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 mt-1">{stats.clientesAtivos}</p>
                 </div>
-                <Users className="w-8 h-8 text-green-600" />
+                <Users className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 mt-2 sm:mt-0" />
               </div>
-              <div className="mt-4 flex items-center">
-                <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-                <span className="text-sm text-green-600">+5% esta semana</span>
+              <div className="mt-2 sm:mt-4 flex items-center">
+                <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-1" />
+                <span className="text-xs sm:text-sm text-green-600 truncate">+5% semana</span>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-orange-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Avaliações Físicas Pendentes</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.avaliacoesFisicasPendentes}</p>
+            <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-orange-200 p-3 sm:p-4 lg:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex-1">
+                  <p className="text-xs sm:text-sm font-medium text-slate-600 truncate">Aval. Físicas</p>
+                  <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 mt-1">{stats.avaliacoesFisicasPendentes}</p>
                 </div>
-                <Dumbbell className="w-8 h-8 text-orange-600" />
+                <Dumbbell className="w-6 h-6 sm:w-8 sm:h-8 text-orange-600 mt-2 sm:mt-0" />
               </div>
-              <div className="mt-4 flex items-center">
-                <Clock className="w-4 h-4 text-orange-500 mr-1" />
-                <span className="text-sm text-orange-600">Aguardando aprovação</span>
+              <div className="mt-2 sm:mt-4 flex items-center">
+                <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-orange-500 mr-1" />
+                <span className="text-xs sm:text-sm text-orange-600 truncate">Aguardando</span>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-purple-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Análises Médicas Pendentes</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.avaliacoesPendentes}</p>
+            <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-purple-200 p-3 sm:p-4 lg:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex-1">
+                  <p className="text-xs sm:text-sm font-medium text-slate-600 truncate">Análises Médicas</p>
+                  <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 mt-1">{stats.avaliacoesPendentes}</p>
                 </div>
-                <Pill className="w-8 h-8 text-purple-600" />
+                <Pill className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600 mt-2 sm:mt-0" />
               </div>
-              <div className="mt-4 flex items-center">
-                <AlertCircle className="w-4 h-4 text-purple-500 mr-1" />
-                <span className="text-sm text-purple-600">Documentos médicos</span>
+              <div className="mt-2 sm:mt-4 flex items-center">
+                <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 text-purple-500 mr-1" />
+                <span className="text-xs sm:text-sm text-purple-600 truncate">Documentos</span>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-blue-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Análises Corporais</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.analisesCorporaisPendentes}</p>
+
+            <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-indigo-200 p-3 sm:p-4 lg:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex-1">
+                  <p className="text-xs sm:text-sm font-medium text-slate-600 truncate">Program. Hoje</p>
+                  <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 mt-1">{stats.programacoesHoje}</p>
                 </div>
-                <Brain className="w-8 h-8 text-blue-600" />
+                <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-600 mt-2 sm:mt-0" />
               </div>
-              <div className="mt-4 flex items-center">
-                <Activity className="w-4 h-4 text-blue-500 mr-1" />
-                <span className="text-sm text-blue-600">Disponíveis para revisão</span>
+              <div className="mt-2 sm:mt-4 flex items-center">
+                <Activity className="w-3 h-3 sm:w-4 sm:h-4 text-indigo-500 mr-1" />
+                <span className="text-xs sm:text-sm text-indigo-600">Meta: 8/dia</span>
               </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-indigo-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Programações Hoje</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.programacoesHoje}</p>
+            <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-teal-200 p-3 sm:p-4 lg:p-6 col-span-2 sm:col-span-1">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex-1">
+                  <p className="text-xs sm:text-sm font-medium text-slate-600 truncate">Taxa Sucesso</p>
+                  <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 mt-1">{stats.taxaSucesso}%</p>
                 </div>
-                <Calendar className="w-8 h-8 text-indigo-600" />
+                <BarChart3 className="w-6 h-6 sm:w-8 sm:h-8 text-teal-600 mt-2 sm:mt-0" />
               </div>
-              <div className="mt-4 flex items-center">
-                <Activity className="w-4 h-4 text-indigo-500 mr-1" />
-                <span className="text-sm text-indigo-600">Meta: 8 por dia</span>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-sm border border-teal-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-600">Taxa de Sucesso</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.taxaSucesso}%</p>
-                </div>
-                <BarChart3 className="w-8 h-8 text-teal-600" />
-              </div>
-              <div className="mt-4 flex items-center">
-                <CheckCircle className="w-4 h-4 text-green-500 mr-1" />
-                <span className="text-sm text-green-600">Excelente performance</span>
+              <div className="mt-2 sm:mt-4 flex items-center">
+                <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-1" />
+                <span className="text-xs sm:text-sm text-green-600">Excelente</span>
               </div>
             </div>
           </div>
 
           {/* Tabs Navigation */}
-          <div className="mb-6">
+          <div className="mb-4 sm:mb-6">
             <div className="border-b border-gray-200">
-              <nav className="-mb-px flex space-x-8">
+              <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto scrollbar-hide">
                 <button
                   onClick={() => setActiveTab('fisicas')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  className={`py-2 px-1 border-b-2 font-medium text-xs sm:text-sm transition-colors whitespace-nowrap ${
                     activeTab === 'fisicas'
                       ? 'border-green-500 text-green-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <Dumbbell className="w-4 h-4" />
-                    Avaliações Físicas
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <Dumbbell className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <span className="hidden sm:inline">Avaliações Físicas</span>
+                    <span className="sm:hidden">Físicas</span>
                     {stats.avaliacoesFisicasPendentes > 0 && (
-                      <span className="ml-2 bg-orange-100 text-orange-600 text-xs font-medium px-2 py-0.5 rounded-full">
+                      <span className="ml-1 sm:ml-2 bg-orange-100 text-orange-600 text-xs font-medium px-1.5 sm:px-2 py-0.5 rounded-full">
                         {stats.avaliacoesFisicasPendentes}
                       </span>
                     )}
@@ -288,36 +275,19 @@ export function Dashboard() {
                 </button>
                 <button
                   onClick={() => setActiveTab('medicamentos')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  className={`py-2 px-1 border-b-2 font-medium text-xs sm:text-sm transition-colors whitespace-nowrap ${
                     activeTab === 'medicamentos'
                       ? 'border-green-500 text-green-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <Pill className="w-4 h-4" />
-                    Análises Médicas
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <Pill className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <span className="hidden sm:inline">Análises Médicas</span>
+                    <span className="sm:hidden">Médicas</span>
                     {stats.avaliacoesPendentes > 0 && (
-                      <span className="ml-2 bg-purple-100 text-purple-600 text-xs font-medium px-2 py-0.5 rounded-full">
+                      <span className="ml-1 sm:ml-2 bg-purple-100 text-purple-600 text-xs font-medium px-1.5 sm:px-2 py-0.5 rounded-full">
                         {stats.avaliacoesPendentes}
-                      </span>
-                    )}
-                  </div>
-                </button>
-                <button
-                  onClick={() => setActiveTab('corporal')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                    activeTab === 'corporal'
-                      ? 'border-green-500 text-green-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Brain className="w-4 h-4" />
-                    Análise Corporal
-                    {stats.analisesCorporaisPendentes > 0 && (
-                      <span className="ml-2 bg-blue-100 text-blue-600 text-xs font-medium px-2 py-0.5 rounded-full">
-                        {stats.analisesCorporaisPendentes}
                       </span>
                     )}
                   </div>
@@ -330,8 +300,6 @@ export function Dashboard() {
           <div className="w-full">
             {activeTab === 'fisicas' ? (
               <AvaliacoesFisicasQueue />
-            ) : activeTab === 'corporal' ? (
-              <AnaliseCorporalQueue userRole="preparador" />
             ) : (
               <AnalisesQueue />
             )}

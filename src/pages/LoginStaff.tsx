@@ -35,64 +35,35 @@ export function LoginStaff() {
     
     try {
       // PRIMEIRO: Verificar se o email corresponde a um usuário staff
-      // Usar consulta RPC customizada ou tentar buscar por auth.users primeiro
       let roleData = null;
-      let roleError = null;
 
       try {
-        // Tentar buscar o usuário primeiro para obter o user_id
-        const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
-        
-        if (authError) {
-          // Abordagem alternativa: fazer login temporário para obter user_id
-          const { data: tempAuth, error: tempError } = await supabase.auth.signInWithPassword({
-            email,
-            password: senha,
-          });
+        // Fazer login temporário para obter user_id e verificar role
+        const { data: tempAuth, error: tempError } = await supabase.auth.signInWithPassword({
+          email,
+          password: senha,
+        });
 
-          if (tempError) {
-            setErro('Credenciais inválidas.');
-            return;
-          }
-
-          // Buscar role com o user_id obtido
-          const { data: profileData, error: profileError } = await supabase
-            .from('perfis')
-            .select('role, user_id, nome_completo')
-            .eq('user_id', tempAuth.user.id)
-            .single();
-
-          if (profileError) {
-            // Fazer logout da tentativa temporária
-            await supabase.auth.signOut();
-            setErro('Usuário não encontrado no sistema.');
-            return;
-          }
-
-          roleData = profileData;
-        } else {
-          // Encontrar o usuário pelo email
-          const targetUser = authUsers.users.find(u => u.email === email);
-          
-          if (!targetUser) {
-            setErro('Email não encontrado no sistema.');
-            return;
-          }
-
-          // Buscar role na tabela perfis
-          const { data: profileData, error: profileError } = await supabase
-            .from('perfis')
-            .select('role, user_id, nome_completo')
-            .eq('user_id', targetUser.id)
-            .single();
-
-          if (profileError) {
-            setErro('Usuário não encontrado no sistema.');
-            return;
-          }
-
-          roleData = profileData;
+        if (tempError) {
+          setErro('Credenciais inválidas.');
+          return;
         }
+
+        // Buscar role com o user_id obtido
+        const { data: profileData, error: profileError } = await supabase
+          .from('perfis')
+          .select('role, user_id, nome_completo')
+          .eq('user_id', tempAuth.user.id)
+          .single();
+
+        if (profileError) {
+          // Fazer logout da tentativa temporária
+          await supabase.auth.signOut();
+          setErro('Usuário não encontrado no sistema.');
+          return;
+        }
+
+        roleData = profileData;
       } catch (err) {
         setErro('Erro ao verificar permissões. Tente novamente.');
         return;

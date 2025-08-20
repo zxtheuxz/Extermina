@@ -259,7 +259,9 @@ export function Cadastro() {
         .single();
 
       if (profileError) {
-        await supabase.auth.admin.deleteUser(signUpData.user.id);
+        // Nota: Não podemos deletar o usuário aqui sem privilégios admin
+        // O Supabase gerenciará usuários órfãos através de policies e triggers
+        console.error('Erro ao criar perfil:', profileError);
         throw profileError;
       }
 

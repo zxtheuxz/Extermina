@@ -15,7 +15,7 @@ interface MedidasExtraidas {
   panturrilhas: number;
 }
 
-// 🎯 PROPORÇÕES v11.5 (CALIBRAÇÃO UNIVERSAL COM BIOTIPO)
+// 🎯 PROPORÇÕES v11.6 (CALIBRAÇÃO UNIVERSAL COM BIOTIPO - AJUSTADA FEMININO)
 const PROPORCOES_ANTROPOMETRICAS = {
   homem: { 
     cintura: 0.503,
@@ -35,7 +35,7 @@ const PROPORCOES_ANTROPOMETRICAS = {
   }
 };
 
-// 🔧 FATORES DE CORREÇÃO POR BIOTIPO v11.5
+// 🔧 FATORES DE CORREÇÃO POR BIOTIPO v11.6
 const FATORES_CORRECAO_MEDIAPIPE = {
   ectomorfo: { // IMC < 23
     cintura: 0.92,      // -8% (corrige superestimação)
@@ -54,12 +54,12 @@ const FATORES_CORRECAO_MEDIAPIPE = {
     panturrilhas: 0.93  // -7%
   },
   femininoMesomorfo: { // Mulheres 23 ≤ IMC < 27
-    cintura: 1.035,     // +3.5% (corrige subestimação)
-    quadril: 0.985,     // -1.5% (CORREÇÃO v11.5: reduz em vez de aumentar!)
-    bracos: 0.91,       // -9% (corrige superestimação)
-    antebracos: 0.94,   // -6%
-    coxas: 1.005,       // +0.5%
-    panturrilhas: 1.01  // +1%
+    cintura: 0.995,     // -0.5% (ajustado v11.6 baseado em medidas reais)
+    quadril: 1.022,     // +2.2% (CORREÇÃO v11.6: aumenta corretamente!)
+    bracos: 0.874,      // -12.6% (corrige superestimação significativa)
+    antebracos: 0.860,  // -14% (corrige superestimação significativa)
+    coxas: 1.060,       // +6% (corrige subestimação)
+    panturrilhas: 0.972 // -2.8% (ajuste fino)
   }
 };
 
@@ -84,7 +84,7 @@ const calcularFatorBiotipo = (imc: number, tipoMedida: keyof MedidasExtraidas): 
   return 1.15;
 };
 
-// ⚖️ SISTEMA DE PESOS HÍBRIDO v11.5 (AJUSTADO POR BIOTIPO)
+// ⚖️ SISTEMA DE PESOS HÍBRIDO v11.6 (AJUSTADO POR BIOTIPO)
 const obterPesosHibridos = (imc: number, tipoMedida: keyof MedidasExtraidas): { pesoVisual: number, pesoEstatistico: number } => {
     if (imc < 23) {
         // Ectomorfos: confie mais nas proporções estatísticas
@@ -112,6 +112,34 @@ interface AnaliseCorpoMediaPipeProps {
   onError: (error: string) => void;
 }
 
+// Função para validar e corrigir altura
+const validarECorrigirAltura = (altura: number): number => {
+  // Se altura > 3, provavelmente está em centímetros
+  if (altura > 3) {
+    console.warn(`⚠️ Altura em centímetros detectada: ${altura}. Convertendo para metros.`);
+    return altura / 100;
+  }
+  // Se altura < 1.0 ou > 2.5, valor suspeito
+  if (altura < 1.0 || altura > 2.5) {
+    console.warn(`⚠️ Altura suspeita: ${altura}m. Usando altura padrão de 1.70m`);
+    return 1.70;
+  }
+  return altura;
+};
+
+// Função para calcular IMC com limites de segurança
+const calcularIMCSeguro = (peso: number, altura: number): number => {
+  const imc = peso / (altura * altura);
+  // Limitar IMC entre 10 e 60 para evitar cálculos extremos
+  const imcLimitado = Math.max(10, Math.min(60, imc));
+  
+  if (imcLimitado !== imc) {
+    console.warn(`⚠️ IMC extremo detectado: ${imc.toFixed(1)}. Limitado para: ${imcLimitado.toFixed(1)}`);
+  }
+  
+  return imcLimitado;
+};
+
 const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
   fotoLateralUrl,
   fotoAberturaUrl,
@@ -127,11 +155,14 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
   const [currentStep, setCurrentStep] = useState<"preparing" | "processing_lateral" | "processing_frontal" | "extracting_measures">('preparing');
   const [wasmSupported, setWasmSupported] = useState<boolean | null>(null);
 
+  // Validar e corrigir altura no início
+  const alturaCorrigida = validarECorrigirAltura(alturaReal);
+
   const verificarWasmSupport = useCallback(async () => { /* ...código de robustez inalterado... */ setWasmSupported(true); }, []);
   useEffect(() => { verificarWasmSupport(); }, [verificarWasmSupport]);
 
   const calcularDistancia = (p1: any, p2: any) => Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
-  const pixelsParaCentimetros = (pixels: number, alturaPixels: number) => (pixels / alturaPixels) * (alturaReal * 100);
+  const pixelsParaCentimetros = (pixels: number, alturaPixels: number) => (pixels / alturaPixels) * (alturaCorrigida * 100);
 
   const detectarBiotipo = (imc: number): 'ectomorfo' | 'mesomorfo' | 'endomorfo' => {
     if (imc < 21) return 'ectomorfo';
@@ -140,12 +171,12 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
   };
 
   const calcularPorProporcoes = (tipoMedida: keyof MedidasExtraidas): number => {
-    const imc = peso / (alturaReal * alturaReal);
+    const imc = calcularIMCSeguro(peso, alturaCorrigida);
     
     // Usa proporções padrão para todos (evita dupla correção)
     const proporcoes = sexo === 'F' ? PROPORCOES_ANTROPOMETRICAS.mulher : PROPORCOES_ANTROPOMETRICAS.homem;
     
-    return (alturaReal * 100) * proporcoes[tipoMedida] * calcularFatorBiotipo(imc, tipoMedida);
+    return (alturaCorrigida * 100) * proporcoes[tipoMedida] * calcularFatorBiotipo(imc, tipoMedida);
   };
 
   const calcularLarguraVisual = (landmarks: any[], pontos: number[], alturaPixels: number): number => {
@@ -168,7 +199,7 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
     
     const alturaPixelsFrontal = calcularDistancia(landmarksFrontal[0], landmarksFrontal[27]);
     const medidasFinais = {} as MedidasExtraidas;
-    const imc = peso / (alturaReal * alturaReal);
+    const imc = calcularIMCSeguro(peso, alturaCorrigida);
     
     Object.keys(LANDMARKS_PARA_LARGURA).forEach(key => {
       const tipoMedida = key as keyof MedidasExtraidas;
@@ -176,7 +207,7 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
       
       console.log(`📊 ${tipoMedida}: Proporção calculada = ${medidaPorProporcao.toFixed(1)}cm (inclui fator biotipo)`);
       
-      // 🔥 REGRA DE EXCEÇÃO v11.5 🔥
+      // 🔥 REGRA DE EXCEÇÃO v11.6 🔥
       // Sistema universal calibrado por biotipo
       
       // PRIORIDADE 1: Correção para ectomorfos (IMC < 23)
@@ -184,10 +215,10 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
           const fatorEctomorfo = FATORES_CORRECAO_MEDIAPIPE.ectomorfo[tipoMedida];
           // Aplicar correção direto na proporção base (sem fator de biotipo)
           const proporcoes = sexo === 'F' ? PROPORCOES_ANTROPOMETRICAS.mulher : PROPORCOES_ANTROPOMETRICAS.homem;
-          const medidaBase = (alturaReal * 100) * proporcoes[tipoMedida];
+          const medidaBase = (alturaCorrigida * 100) * proporcoes[tipoMedida];
           medidasFinais[tipoMedida] = medidaBase * fatorEctomorfo;
           
-          console.log(`🔥 ${tipoMedida}: Correção Ectomorfo v11.5 para IMC ${imc.toFixed(1)}`);
+          console.log(`🔥 ${tipoMedida}: Correção Ectomorfo v11.6 para IMC ${imc.toFixed(1)}`);
           console.log(`   Base: ${medidaBase.toFixed(1)}cm → Corrigida: ${medidasFinais[tipoMedida].toFixed(1)}cm (Fator: ${fatorEctomorfo}x)`);
           return; // Pula para a próxima medida
       }
@@ -196,10 +227,10 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
       if (sexo === 'F' && imc >= 23 && imc < 27) {
           const fatorFemininoMeso = FATORES_CORRECAO_MEDIAPIPE.femininoMesomorfo[tipoMedida];
           const proporcoes = PROPORCOES_ANTROPOMETRICAS.mulher;
-          const medidaBase = (alturaReal * 100) * proporcoes[tipoMedida];
+          const medidaBase = (alturaCorrigida * 100) * proporcoes[tipoMedida];
           medidasFinais[tipoMedida] = medidaBase * fatorFemininoMeso;
           
-          console.log(`🔥 ${tipoMedida}: Correção Feminino Mesomorfo v11.5 para IMC ${imc.toFixed(1)}`);
+          console.log(`🔥 ${tipoMedida}: Correção Feminino Mesomorfo v11.6 para IMC ${imc.toFixed(1)}`);
           console.log(`   Base: ${medidaBase.toFixed(1)}cm → Corrigida: ${medidasFinais[tipoMedida].toFixed(1)}cm (Fator: ${fatorFemininoMeso}x)`);
           return; // Pula para a próxima medida
       }
@@ -208,20 +239,20 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
       if (imc >= 27) {
           const fatorEndomorfo = FATORES_CORRECAO_MEDIAPIPE.endomorfo[tipoMedida];
           const proporcoes = sexo === 'F' ? PROPORCOES_ANTROPOMETRICAS.mulher : PROPORCOES_ANTROPOMETRICAS.homem;
-          const medidaBase = (alturaReal * 100) * proporcoes[tipoMedida];
+          const medidaBase = (alturaCorrigida * 100) * proporcoes[tipoMedida];
           
           if (tipoMedida === 'cintura' || tipoMedida === 'quadril') {
               // Para tronco: aplicar fator progressivo adicional
               const fatorIMC = 1 + ((imc - 25) * 0.018);
               medidasFinais[tipoMedida] = medidaBase * fatorIMC * fatorEndomorfo;
               
-              console.log(`🔥 ${tipoMedida}: Correção Endomorfo v11.5 para IMC ${imc.toFixed(1)}`);
+              console.log(`🔥 ${tipoMedida}: Correção Endomorfo v11.6 para IMC ${imc.toFixed(1)}`);
               console.log(`   Base: ${medidaBase.toFixed(1)}cm → Corrigida: ${medidasFinais[tipoMedida].toFixed(1)}cm (Fator: ${(fatorIMC * fatorEndomorfo).toFixed(3)}x)`);
           } else {
               // Para membros: aplicar apenas fator de correção
               medidasFinais[tipoMedida] = medidaBase * calcularFatorBiotipo(imc, tipoMedida) * fatorEndomorfo;
               
-              console.log(`🔥 ${tipoMedida}: Correção Membros Endomorfo v11.5`);
+              console.log(`🔥 ${tipoMedida}: Correção Membros Endomorfo v11.6`);
               console.log(`   Base: ${medidaBase.toFixed(1)}cm → Corrigida: ${medidasFinais[tipoMedida].toFixed(1)}cm (Fator: ${fatorEndomorfo}x)`);
           }
           return; // Pula para a próxima medida
@@ -237,8 +268,8 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
       if (medida3D > 0) {
         const diferencaPercentual = Math.abs(medida3D - medidaPorProporcao) / medidaPorProporcao;
         
-        // Validação mais rigorosa para ectomorfos
-        const limiteSeguranca = imc < 23 ? 0.25 : 0.30;
+        // Validação mais rigorosa para ectomorfos e ajuste para feminino
+        const limiteSeguranca = sexo === 'F' ? 0.40 : (imc < 23 ? 0.25 : 0.30);
         
         if (diferencaPercentual > limiteSeguranca) {
             console.warn(`🛡️ ${tipoMedida}: Medida 3D descartada por segurança (${(diferencaPercentual * 100).toFixed(1)}% > ${(limiteSeguranca * 100)}%).`);
@@ -290,9 +321,9 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
     setIsProcessing(true);
     try {
       setCurrentStep('preparing');
-      const imc = peso / (alturaReal * alturaReal);
+      const imc = calcularIMCSeguro(peso, alturaCorrigida);
       const biotipo = detectarBiotipo(imc);
-      console.log(`🚀 Iniciando Sistema v11.5 Universal | Perfil: ${sexo}, ${alturaReal}m, ${peso}kg, IMC ${imc.toFixed(1)}, Biotipo: ${biotipo}`);
+      console.log(`🚀 Iniciando Sistema v11.6 Universal | Perfil: ${sexo}, ${alturaCorrigida}m, ${peso}kg, IMC ${imc.toFixed(1)}, Biotipo: ${biotipo}`);
       
       setCurrentStep('processing_frontal');
       const resultsFrontal = await processarImagem(fotoAberturaUrl, canvasAberturaRef.current);
@@ -308,7 +339,7 @@ const AnaliseCorpoMediaPipe: React.FC<AnaliseCorpoMediaPipeProps> = ({
       try { onMedidasExtraidas(calcularMedidasFallback()); }
       catch (fallbackError) { onError(error instanceof Error ? error.message : 'Erro crítico.'); }
     } finally { setIsProcessing(false); }
-  }, [processarImagem, fotoAberturaUrl, fotoLateralUrl, onMedidasExtraidas, onError, alturaReal, peso, sexo, wasmSupported]);
+  }, [processarImagem, fotoAberturaUrl, fotoLateralUrl, onMedidasExtraidas, onError, alturaCorrigida, peso, sexo, wasmSupported]);
 
   // Iniciar análise automaticamente quando o componente montar e WASM estiver pronto
   useEffect(() => {

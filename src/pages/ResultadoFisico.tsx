@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../contexts/ThemeContext';
 import { jsPDF } from 'jspdf';
-import { Play, Download, ArrowLeft, BarChart3, Filter, TrendingUp, Calendar, Activity, Target } from 'lucide-react';
+import { Play, Download, ArrowLeft, BarChart3, Filter, TrendingUp, Calendar, Activity, Target, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import BotaoMetodoTreino from '../components/BotaoMetodoTreino';
 import { encontrarVideoDoExercicio as encontrarVideoUtils } from '../utils/exercicios';
 import { formatarMetodoPDF, encontrarMetodoTreino } from '../utils/metodosTreino';
@@ -157,6 +157,10 @@ export function ResultadoFisico() {
   // Estados para controlar as animações de ajuda
   const [mostrarAnimacoesMeses, setMostrarAnimacoesMeses] = useState(true);
   const [mostrarAnimacaoNutricional, setMostrarAnimacaoNutricional] = useState(true);
+  
+  // Estado para observações personalizadas
+  const [observacoesPersonalizadas, setObservacoesPersonalizadas] = useState<string | null>(null);
+  const [observacoesExpandidas, setObservacoesExpandidas] = useState<boolean>(true);
   
   // Obter o ID da query string
   const queryParams = new URLSearchParams(location.search);
@@ -531,28 +535,60 @@ export function ResultadoFisico() {
     buscarPerfil();
   }, [id]);
 
+  // Função para extrair observações personalizadas
+  const extrairObservacoesPersonalizadas = (conteudo: string): string | null => {
+    // Procurar o índice do primeiro "TREINO" no conteúdo
+    const regexPrimeiroTreino = /TREINO\s+[A-Z]/i;
+    const matchPrimeiroTreino = conteudo.match(regexPrimeiroTreino);
+    
+    if (matchPrimeiroTreino && matchPrimeiroTreino.index && matchPrimeiroTreino.index > 0) {
+      // Extrair todo o texto antes do primeiro treino
+      const observacoes = conteudo.substring(0, matchPrimeiroTreino.index).trim();
+      
+      // Retornar apenas se houver conteúdo significativo
+      if (observacoes.length > 0) {
+        return observacoes;
+      }
+    }
+    
+    return null;
+  };
+
   // Processamento único dos dados quando o perfil muda
   useEffect(() => {
     if (perfil?.resultado_fisica) {
       const conteudo = perfil.resultado_fisica;
       
-      // Verificar se parece ser uma ficha de treino
-      const pareceSerFichaDeTreino = conteudo.includes('TREINO A') || 
-                                     conteudo.includes('TREINO B') || 
-                                     conteudo.toLowerCase().includes('treino a') ||
-                                     conteudo.toLowerCase().includes('treino b') ||
+      // Verificar se parece ser uma ficha de treino (buscar em qualquer lugar do conteúdo)
+      const pareceSerFichaDeTreino = /TREINO\s+[A-Z]/i.test(conteudo) || 
                                      conteudo.includes('exercício') ||
                                      conteudo.includes('exercicio') ||
                                      conteudo.includes('séries') ||
-                                     conteudo.includes('series');
+                                     conteudo.includes('series') ||
+                                     /\d+\s*[-–—]\s*\w+.*\d+\s*[xX×]\s*\d+/i.test(conteudo);
       
       setEhFichaTreino(pareceSerFichaDeTreino);
+      
+      // Extrair observações personalizadas se for ficha de treino
+      if (pareceSerFichaDeTreino) {
+        const observacoes = extrairObservacoesPersonalizadas(conteudo);
+        setObservacoesPersonalizadas(observacoes);
+      }
       
       if (pareceSerFichaDeTreino) {
         // Processar o conteúdo uma única vez
         const processarConteudoTreino = () => {
           try {
-            const linhas = conteudo.split('\n').filter(linha => linha.trim().length > 0);
+            // Extrair observações localmente
+            let conteudoParaProcessar = conteudo;
+            const indexPrimeiroTreino = conteudo.search(/TREINO\s+[A-Z]/i);
+            
+            if (indexPrimeiroTreino > 0) {
+              // Se há texto antes do primeiro treino, remover para processar apenas os treinos
+              conteudoParaProcessar = conteudo.substring(indexPrimeiroTreino);
+            }
+            
+            const linhas = conteudoParaProcessar.split('\n').filter(linha => linha.trim().length > 0);
             
             const treinos: Treino[] = [];
             let treinoAtual: Treino | null = null;
@@ -1454,6 +1490,40 @@ export function ResultadoFisico() {
 
     return (
       <div>
+        {/* Observações Personalizadas */}
+        {observacoesPersonalizadas && (
+          <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg shadow-sm overflow-hidden">
+            <div 
+              className="p-4 cursor-pointer hover:bg-amber-100/50 dark:hover:bg-amber-900/30 transition-colors"
+              onClick={() => setObservacoesExpandidas(!observacoesExpandidas)}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                  <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-100">
+                    Observações do Preparador Físico
+                  </h3>
+                </div>
+                {observacoesExpandidas ? (
+                  <ChevronUp className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                ) : (
+                  <ChevronDown className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                )}
+              </div>
+            </div>
+            
+            {observacoesExpandidas && (
+              <div className="px-4 pb-4 border-t border-amber-200 dark:border-amber-800">
+                <div className="pt-4">
+                  <pre className="whitespace-pre-wrap text-gray-800 dark:text-gray-200 font-sans text-sm leading-relaxed">
+                    {observacoesPersonalizadas}
+                  </pre>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Progresso Mensal */}
         <ProgressoMensal />
 
@@ -1748,6 +1818,40 @@ export function ResultadoFisico() {
               </div>
             ) : perfil?.resultado_fisica ? (
               <div>
+                {/* Observações Personalizadas */}
+                {observacoesPersonalizadas && (
+                  <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg shadow-sm overflow-hidden">
+                    <div 
+                      className="p-4 cursor-pointer hover:bg-amber-100/50 dark:hover:bg-amber-900/30 transition-colors"
+                      onClick={() => setObservacoesExpandidas(!observacoesExpandidas)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                          <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-100">
+                            Observações do Preparador Físico
+                          </h3>
+                        </div>
+                        {observacoesExpandidas ? (
+                          <ChevronUp className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                        ) : (
+                          <ChevronDown className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                        )}
+                      </div>
+                    </div>
+                    
+                    {observacoesExpandidas && (
+                      <div className="px-4 pb-4 border-t border-amber-200 dark:border-amber-800">
+                        <div className="pt-4">
+                          <pre className="whitespace-pre-wrap text-gray-800 dark:text-gray-200 font-sans text-sm leading-relaxed">
+                            {observacoesPersonalizadas}
+                          </pre>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">
                   Treinos do {mesSelecionado}º Mês
                 </h2>
@@ -2032,6 +2136,40 @@ export function ResultadoFisico() {
                     
                     {/* Treinos Mobile */}
                     <div className="p-4">
+                      {/* Observações Personalizadas Mobile */}
+                      {observacoesPersonalizadas && (
+                        <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg shadow-sm overflow-hidden">
+                          <div 
+                            className="p-4 cursor-pointer hover:bg-amber-100/50 dark:hover:bg-amber-900/30 transition-colors"
+                            onClick={() => setObservacoesExpandidas(!observacoesExpandidas)}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                                <h3 className="text-lg font-semibold text-amber-900 dark:text-amber-100">
+                                  Observações do Preparador Físico
+                                </h3>
+                              </div>
+                              {observacoesExpandidas ? (
+                                <ChevronUp className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                              ) : (
+                                <ChevronDown className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                              )}
+                            </div>
+                          </div>
+                          
+                          {observacoesExpandidas && (
+                            <div className="px-4 pb-4 border-t border-amber-200 dark:border-amber-800">
+                              <div className="pt-4">
+                                <pre className="whitespace-pre-wrap text-gray-800 dark:text-gray-200 font-sans text-sm leading-relaxed">
+                                  {observacoesPersonalizadas}
+                                </pre>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div className="space-y-6">
                         {treinosDoMesFiltrados.map((treino, index) => (
                           <TreinoCard key={`${treino.letra}-${index}`} treino={treino} index={index} />

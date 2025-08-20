@@ -211,7 +211,7 @@ const ResultadosAnalise: React.FC<ResultadosAnaliseProps> = ({ resultado }) => {
           {dados.perfil.sexo === 'M' ? 'Masculino' : 'Feminino'} {dados.perfil.idade} anos {(dados.perfil.altura).toFixed(2)} m
         </h1>
         <p className="text-gray-600 dark:text-gray-400">
-          Avaliação em: {new Date().toLocaleDateString('pt-BR')}
+          Avaliação em: {medidaSalva ? new Date(medidaSalva.created_at).toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}
         </p>
       </div>
 

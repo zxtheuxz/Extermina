@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
+import { normalizarAltura } from '../../utils/normalizarAltura';
 import { 
   FileText, 
   Clock, 
@@ -13,11 +14,27 @@ import {
   Phone,
   Mail,
   MoreHorizontal,
-  Brain
+  Brain,
+  Plus,
+  Loader2,
+  XCircle,
+  Activity,
+  Zap
 } from 'lucide-react';
 import { EditorResultadoFisico } from './EditorResultadoFisico';
-import { VisualizadorAnaliseCorporal } from '../shared/VisualizadorAnaliseCorporal';
 import { VisualizadorFormularioFisico } from './VisualizadorFormularioFisico';
+import ResultadosAnalise from '../analise-corporal/ResultadosAnalise';
+import AnaliseCorpoMediaPipe from '../analise-corporal/AnaliseCorpoMediaPipe';
+import { 
+  analisarComposicaoCorporal,
+  classificarRazaoCinturaQuadril,
+  classificarRazaoCinturaEstatura,
+  classificarIndiceConicidade,
+  classificarIndiceMassaMagra,
+  classificarIndiceMassaGorda,
+  classificarCintura,
+  classificarQuadril
+} from '../../utils/calculosComposicaoCorporal';
 
 interface AvaliacaoFisica {
   id: string;
@@ -29,6 +46,7 @@ interface AvaliacaoFisica {
   observacoes?: string;
   created_at: string;
   updated_at: string;
+  resultado_fisica_editado_em?: string;
   usuario: {
     id: string;
     nome_completo: string;
@@ -45,13 +63,18 @@ interface AvaliacoesFisicasQueueProps {
 export function AvaliacoesFisicasQueue({ onAvaliacaoSelect }: AvaliacoesFisicasQueueProps) {
   const [avaliacoes, setAvaliacoes] = useState<AvaliacaoFisica[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'TODAS' | 'PENDENTE' | 'APROVADO' | 'REJEITADO' | 'EM_EDICAO'>('PENDENTE');
+  const [filter, setFilter] = useState<'TODAS' | 'PENDENTE' | 'APROVADO' | 'REJEITADO'>('PENDENTE');
   const [selectedAvaliacao, setSelectedAvaliacao] = useState<AvaliacaoFisica | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [showAnaliseCorpral, setShowAnaliseCorpral] = useState<string | null>(null);
   const [showFormularioCompleto, setShowFormularioCompleto] = useState<string | null>(null);
   const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const [analiseCorporalData, setAnaliseCorporalData] = useState<any>(null);
+  const [loadingAnalise, setLoadingAnalise] = useState(false);
+  const [showGerarAnalise, setShowGerarAnalise] = useState(false);
+  const [dadosUsuario, setDadosUsuario] = useState<any>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   // Função debounced para carregar avaliações
   const loadAvaliacoesDebounced = useCallback(() => {
@@ -169,22 +192,13 @@ export function AvaliacoesFisicasQueue({ onAvaliacaoSelect }: AvaliacoesFisicasQ
 
   const handleSaveEdit = async (avaliacaoId: string, novoResultado: string) => {
     try {
-      const { error } = await supabase.rpc('atualizar_aprovacao_fisica', {
-        p_id: avaliacaoId,
-        p_status: 'EM_EDICAO',
-        p_resultado_editado: novoResultado
-      });
-
-      if (error) {
-        console.error('Erro ao salvar edição:', error);
-        return;
-      }
-
+      // O salvamento já foi feito no EditorResultadoFisico
+      // Apenas recarregar a lista e fechar o modal
       await loadAvaliacoes();
       setEditorOpen(false);
       setSelectedAvaliacao(null);
     } catch (error) {
-      console.error('Erro ao salvar:', error);
+      console.error('Erro ao recarregar:', error);
     }
   };
 
@@ -206,8 +220,6 @@ export function AvaliacoesFisicasQueue({ onAvaliacaoSelect }: AvaliacoesFisicasQ
         return 'bg-green-100 text-green-800 border-green-200';
       case 'REJEITADO':
         return 'bg-red-100 text-red-800 border-red-200';
-      case 'EM_EDICAO':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
@@ -221,12 +233,206 @@ export function AvaliacoesFisicasQueue({ onAvaliacaoSelect }: AvaliacoesFisicasQ
         return <Check className="w-4 h-4" />;
       case 'REJEITADO':
         return <X className="w-4 h-4" />;
-      case 'EM_EDICAO':
-        return <Edit3 className="w-4 h-4" />;
       default:
         return <AlertCircle className="w-4 h-4" />;
     }
   };
+
+  const carregarAnaliseCorporal = async () => {
+    if (!showAnaliseCorpral) return;
+
+    setLoadingAnalise(true);
+    try {
+      // Buscar análise existente
+      const { data: medidaData, error: medidaError } = await supabase
+        .from('medidas_corporais')
+        .select('*')
+        .eq('user_id', showAnaliseCorpral)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (medidaData && !medidaError) {
+        // Buscar dados atualizados das avaliações nutricionais
+        let dadosNutricionais = null;
+        
+        // Primeiro tentar buscar na tabela masculino
+        const { data: avalMasc } = await supabase
+          .from('avaliacao_nutricional')
+          .select('altura, peso, idade')
+          .eq('user_id', showAnaliseCorpral)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (avalMasc) {
+          dadosNutricionais = { ...avalMasc, sexo: 'M' };
+        } else {
+          // Se não encontrou, tentar na tabela feminino
+          const { data: avalFem } = await supabase
+            .from('avaliacao_nutricional_feminino')
+            .select('altura, peso, idade')
+            .eq('user_id', showAnaliseCorpral)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+          
+          if (avalFem) {
+            dadosNutricionais = { ...avalFem, sexo: 'F' };
+          }
+        }
+
+        // Usar dados da avaliação nutricional se disponíveis
+        const idade = dadosNutricionais?.idade || medidaData.idade_calculada;
+        const sexo = dadosNutricionais?.sexo || medidaData.sexo_usado;
+
+        // Formatar dados para o componente ResultadosAnalise
+        setAnaliseCorporalData({
+          composicao: {
+            percentualGordura: medidaData.percentual_gordura,
+            massaGorda: medidaData.massa_gorda,
+            massaMagra: medidaData.massa_magra,
+            tmb: medidaData.tmb,
+            imc: medidaData.imc,
+            aguaCorporal: medidaData.massa_magra * 0.723,
+            aguaCorporalPercentual: (medidaData.massa_magra * 0.723 / medidaData.peso_usado) * 100
+          },
+          indices: {
+            indiceGrimaldi: medidaData.shaped_score,
+            razaoCinturaQuadril: classificarRazaoCinturaQuadril(
+              medidaData.razao_cintura_quadril,
+              sexo?.toLowerCase() === 'masculino' || sexo === 'M' ? 'M' : 'F'
+            ),
+            razaoCinturaEstatura: classificarRazaoCinturaEstatura(medidaData.razao_cintura_estatura),
+            indiceConicidade: classificarIndiceConicidade(medidaData.indice_conicidade),
+            indiceMassaMagra: classificarIndiceMassaMagra(
+              medidaData.massa_magra / Math.pow(medidaData.altura_usada, 2),
+              sexo?.toLowerCase() === 'masculino' || sexo === 'M' ? 'M' : 'F'
+            ),
+            indiceMassaGorda: classificarIndiceMassaGorda(
+              medidaData.massa_gorda / Math.pow(medidaData.altura_usada, 2)
+            ),
+            cintura: classificarCintura(
+              medidaData.medida_cintura,
+              sexo?.toLowerCase() === 'masculino' || sexo === 'M' ? 'M' : 'F'
+            ),
+            quadril: classificarQuadril(
+              medidaData.medida_quadril,
+              sexo?.toLowerCase() === 'masculino' || sexo === 'M' ? 'M' : 'F'
+            )
+          },
+          medidas: {
+            bracos: medidaData.medida_bracos,
+            antebracos: medidaData.medida_antebracos,
+            cintura: medidaData.medida_cintura,
+            quadril: medidaData.medida_quadril,
+            coxas: medidaData.medida_coxas,
+            panturrilhas: medidaData.medida_panturrilhas
+          },
+          perfil: {
+            altura: medidaData.altura_usada,
+            peso: medidaData.peso_usado,
+            idade: idade,
+            sexo: sexo?.toLowerCase() === 'masculino' || sexo === 'M' ? 'M' : 'F'
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao carregar análise corporal:', error);
+    } finally {
+      setLoadingAnalise(false);
+    }
+  };
+
+  const iniciarGeracaoAnalise = async () => {
+    if (!showAnaliseCorpral) return;
+
+    try {
+      // Buscar dados do usuário
+      const { data: perfilData } = await supabase
+        .from('perfis')
+        .select('sexo, foto_lateral_url, foto_abertura_url, data_nascimento')
+        .eq('user_id', showAnaliseCorpral)
+        .single();
+
+      if (!perfilData?.foto_lateral_url || !perfilData?.foto_abertura_url) {
+        alert('O cliente precisa enviar as fotos lateral e de abertura antes de gerar a análise.');
+        return;
+      }
+
+      // Buscar dados nutricionais mais recentes (primeiro masculino, depois feminino)
+      let dadosAvaliacao = null;
+      
+      // Tentar buscar na tabela masculino
+      const { data: avalMasc } = await supabase
+        .from('avaliacao_nutricional')
+        .select('altura, peso, idade')
+        .eq('user_id', showAnaliseCorpral)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (avalMasc) {
+        dadosAvaliacao = { ...avalMasc, sexo: 'M' };
+      } else {
+        // Se não encontrou, tentar na tabela feminino
+        const { data: avalFem } = await supabase
+          .from('avaliacao_nutricional_feminino')
+          .select('altura, peso, idade')
+          .eq('user_id', showAnaliseCorpral)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (avalFem) {
+          dadosAvaliacao = { ...avalFem, sexo: 'F' };
+        }
+      }
+
+      if (!dadosAvaliacao) {
+        alert('Dados nutricionais não encontrados. O cliente precisa preencher a avaliação nutricional primeiro.');
+        return;
+      }
+
+      // Usa a função para normalizar altura para metros
+      const alturaEmMetros = normalizarAltura(dadosAvaliacao.altura);
+
+      setDadosUsuario({
+        altura: alturaEmMetros,
+        peso: dadosAvaliacao.peso,
+        idade: dadosAvaliacao.idade, // Usar idade da tabela nutricional
+        sexo: dadosAvaliacao.sexo, // Usar sexo da tabela nutricional
+        foto_lateral_url: perfilData.foto_lateral_url,
+        foto_abertura_url: perfilData.foto_abertura_url
+      });
+
+      setShowGerarAnalise(true);
+    } catch (error) {
+      console.error('Erro ao buscar dados do usuário:', error);
+      alert('Erro ao buscar dados do usuário.');
+    }
+  };
+
+  // Carregar análise quando abrir o modal
+  useEffect(() => {
+    if (showAnaliseCorpral) {
+      carregarAnaliseCorporal();
+    }
+  }, [showAnaliseCorpral]);
+
+  // Fechar menu dropdown quando clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openMenuId && !(event.target as Element).closest('[data-menu-button]') && !(event.target as Element).closest('[data-menu-dropdown]')) {
+        setOpenMenuId(null);
+      }
+    };
+
+    if (openMenuId) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [openMenuId]);
 
   if (loading) {
     return (
@@ -242,29 +448,28 @@ export function AvaliacoesFisicasQueue({ onAvaliacaoSelect }: AvaliacoesFisicasQ
     <>
       <div className="bg-white rounded-xl shadow-sm border border-slate-200">
         {/* Header */}
-        <div className="p-6 border-b border-slate-200">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="p-4 sm:p-6 border-b border-slate-200">
+          <div className="flex flex-col gap-4">
             <div>
-              <h3 className="text-lg font-semibold text-slate-900">Avaliações Físicas</h3>
-              <p className="text-sm text-slate-600">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900">Avaliações Físicas</h3>
+              <p className="text-xs sm:text-sm text-slate-600">
                 Gerencie e aprove os resultados das avaliações físicas
               </p>
             </div>
             
             {/* Filtros */}
-            <div className="flex items-center gap-2">
-              {(['TODAS', 'PENDENTE', 'APROVADO', 'REJEITADO', 'EM_EDICAO'] as const).map((status) => (
+            <div className="flex overflow-x-auto scrollbar-hide gap-2 pb-2">
+              {(['TODAS', 'PENDENTE', 'APROVADO', 'REJEITADO'] as const).map((status) => (
                 <button
                   key={status}
                   onClick={() => setFilter(status)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
                     filter === status
                       ? 'bg-green-100 text-green-700 border border-green-200'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
                   }`}
                 >
                   {status === 'TODAS' ? 'Todas' : 
-                   status === 'EM_EDICAO' ? 'Em Edição' :
                    status.charAt(0) + status.slice(1).toLowerCase()}
                 </button>
               ))}
@@ -273,7 +478,7 @@ export function AvaliacoesFisicasQueue({ onAvaliacaoSelect }: AvaliacoesFisicasQ
         </div>
 
         {/* Lista de Avaliações */}
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {avaliacoes.length === 0 ? (
             <div className="text-center py-8">
               <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -286,62 +491,70 @@ export function AvaliacoesFisicasQueue({ onAvaliacaoSelect }: AvaliacoesFisicasQ
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {avaliacoes.map((avaliacao) => (
                 <div
                   key={avaliacao.id}
-                  className="border border-slate-200 rounded-lg p-4 hover:border-slate-300 transition-colors"
+                  className="border border-slate-200 rounded-lg p-3 sm:p-4 hover:border-slate-300 transition-colors"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-slate-500" />
-                          <span className="font-medium text-slate-900">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <User className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                          <span className="font-medium text-slate-900 truncate">
                             {avaliacao.usuario.nome_completo}
                           </span>
                         </div>
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border ${getStatusColor(avaliacao.status)}`}>
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border self-start ${getStatusColor(avaliacao.status)}`}>
                           {getStatusIcon(avaliacao.status)}
-                          {avaliacao.status === 'EM_EDICAO' ? 'EM EDIÇÃO' : avaliacao.status}
+                          <span className="hidden sm:inline">{avaliacao.status}</span>
+                          <span className="sm:hidden">
+                            {avaliacao.status === 'PENDENTE' ? 'PEND.' :
+                             avaliacao.status === 'APROVADO' ? 'APROV.' :
+                             avaliacao.status === 'REJEITADO' ? 'REJ.' : avaliacao.status}
+                          </span>
                         </span>
                       </div>
                       
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-slate-600 mb-3">
-                        <div className="flex items-center gap-2">
-                          <Mail className="w-3 h-3" />
-                          {avaliacao.usuario.email}
+                      <div className="grid grid-cols-1 gap-1 sm:gap-2 text-xs sm:text-sm text-slate-600 mb-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Mail className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate">{avaliacao.usuario.email}</span>
                         </div>
                         {avaliacao.usuario.telefone && (
-                          <div className="flex items-center gap-2">
-                            <Phone className="w-3 h-3" />
-                            {avaliacao.usuario.telefone}
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Phone className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{avaliacao.usuario.telefone}</span>
                           </div>
                         )}
                         <div className="flex items-center gap-2">
-                          <Calendar className="w-3 h-3" />
+                          <Calendar className="w-3 h-3 flex-shrink-0" />
                           {formatDate(avaliacao.created_at)}
                         </div>
                       </div>
                       
                       {avaliacao.observacoes && (
-                        <div className="bg-slate-50 rounded-md p-2 mb-3">
+                        <div className="bg-slate-50 rounded-md p-2 mb-2 sm:mb-3">
                           <p className="text-xs text-slate-600">
                             <strong>Observações:</strong> {avaliacao.observacoes}
                           </p>
                         </div>
                       )}
 
-                      {avaliacao.resultado_editado && (
-                        <div className="bg-blue-50 rounded-md p-2 mb-3">
+                      {avaliacao.resultado_fisica_editado_em && (
+                        <div className="bg-blue-50 rounded-md p-2 mb-2 sm:mb-3">
                           <p className="text-xs text-blue-600">
-                            <strong>Resultado editado</strong> - Última atualização: {formatDate(avaliacao.updated_at)}
+                            <strong>Treino editado em:</strong> {formatDate(avaliacao.resultado_fisica_editado_em)}
                           </p>
                         </div>
                       )}
+
+
                     </div>
                     
-                    <div className="flex items-center gap-2 ml-4">
+                    {/* Desktop Actions */}
+                    <div className="hidden sm:flex items-center gap-2">
                       <button
                         onClick={() => setShowFormularioCompleto(avaliacao.user_id)}
                         className="p-2 text-purple-600 hover:bg-purple-50 rounded-md transition-colors"
@@ -366,7 +579,7 @@ export function AvaliacoesFisicasQueue({ onAvaliacaoSelect }: AvaliacoesFisicasQ
                         <Edit3 className="w-4 h-4" />
                       </button>
                       
-                      {(avaliacao.status === 'PENDENTE' || avaliacao.status === 'EM_EDICAO') && (
+                      {avaliacao.status === 'PENDENTE' && (
                         <>
                           <button
                             onClick={() => handleApprove(avaliacao.id)}
@@ -385,6 +598,72 @@ export function AvaliacoesFisicasQueue({ onAvaliacaoSelect }: AvaliacoesFisicasQ
                             Rejeitar
                           </button>
                         </>
+                      )}
+                    </div>
+
+                    {/* Mobile Actions - Ícones Principais */}
+                    <div className="flex items-center gap-1 sm:hidden">
+                      <button
+                        onClick={() => setShowFormularioCompleto(avaliacao.user_id)}
+                        className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-md transition-colors"
+                        title="Ver formulário"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      
+                      <button
+                        onClick={() => setShowAnaliseCorpral(avaliacao.user_id)}
+                        className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-md transition-colors"
+                        title="Análise corporal"
+                      >
+                        <Brain className="w-4 h-4" />
+                      </button>
+                      
+                      <button
+                        onClick={() => handleEdit(avaliacao)}
+                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                        title="Editar"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      
+                      {/* Menu dropdown apenas para ações de aprovação */}
+                      {avaliacao.status === 'PENDENTE' && (
+                        <div className="relative">
+                          <button
+                            data-menu-button
+                            onClick={() => setOpenMenuId(openMenuId === avaliacao.id ? null : avaliacao.id)}
+                            className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
+                            title="Mais ações"
+                          >
+                            <MoreHorizontal className="w-4 h-4 text-slate-600" />
+                          </button>
+                          
+                          {openMenuId === avaliacao.id && (
+                            <div data-menu-dropdown className="absolute right-0 top-8 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-10">
+                              <button
+                                onClick={() => {
+                                  handleApprove(avaliacao.id);
+                                  setOpenMenuId(null);
+                                }}
+                                className="w-full px-3 py-2 text-left text-sm text-green-700 hover:bg-green-50 flex items-center gap-2"
+                              >
+                                <Check className="w-4 h-4" />
+                                Aprovar
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleReject(avaliacao.id);
+                                  setOpenMenuId(null);
+                                }}
+                                className="w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 flex items-center gap-2"
+                              >
+                                <X className="w-4 h-4" />
+                                Rejeitar
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -410,19 +689,156 @@ export function AvaliacoesFisicasQueue({ onAvaliacaoSelect }: AvaliacoesFisicasQ
 
       {/* Modal Análise Corporal */}
       {showAnaliseCorpral && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900">Análise Corporal do Cliente</h2>
-              <button
-                onClick={() => setShowAnaliseCorpral(null)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-7xl w-full max-h-[95vh] overflow-hidden flex flex-col">
+            {/* Header fixo */}
+            <div className="p-6 border-b border-slate-200 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-green-500 to-teal-600">
+                    <Brain className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-slate-900">
+                      Análise Corporal do Cliente
+                    </h3>
+                    <p className="text-sm text-slate-600 mt-1">
+                      Visualize e gerencie a análise corporal completa
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowAnaliseCorpral(null);
+                    setAnaliseCorporalData(null);
+                    setShowGerarAnalise(false);
+                  }}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <XCircle className="w-6 h-6 text-slate-600" />
+                </button>
+              </div>
             </div>
-            <div className="p-6">
-              <VisualizadorAnaliseCorporal userId={showAnaliseCorpral} showUserInfo={false} />
+
+            {/* Corpo com scroll */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-6">
+                {loadingAnalise ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-8 h-8 animate-spin text-green-600 mr-3" />
+                    <span className="text-lg text-slate-600">Carregando análise corporal...</span>
+                  </div>
+                ) : showGerarAnalise && dadosUsuario ? (
+                  <div className="bg-green-50 rounded-lg p-6">
+                    <h4 className="text-lg font-semibold text-slate-900 mb-4">
+                      Processando Análise Corporal
+                    </h4>
+                    <AnaliseCorpoMediaPipe
+                      fotoLateralUrl={dadosUsuario.foto_lateral_url}
+                      fotoAberturaUrl={dadosUsuario.foto_abertura_url}
+                      alturaReal={dadosUsuario.altura}
+                      peso={dadosUsuario.peso}
+                      sexo={dadosUsuario.sexo?.toLowerCase() === 'masculino' ? 'M' : 'F'}
+                      onMedidasExtraidas={async (medidas) => {
+                        try {
+                          // Calcular composição corporal
+                          const resultado = analisarComposicaoCorporal(medidas, {
+                            altura: dadosUsuario.altura,
+                            peso: dadosUsuario.peso,
+                            idade: dadosUsuario.idade,
+                            sexo: dadosUsuario.sexo?.toLowerCase() === 'masculino' ? 'M' : 'F'
+                          });
+
+                          // Salvar no banco
+                          const { error } = await supabase
+                            .from('medidas_corporais')
+                            .insert({
+                              user_id: showAnaliseCorpral,
+                              medida_bracos: medidas.bracos,
+                              medida_antebracos: medidas.antebracos,
+                              medida_cintura: medidas.cintura,
+                              medida_quadril: medidas.quadril,
+                              medida_coxas: medidas.coxas,
+                              medida_panturrilhas: medidas.panturrilhas,
+                              percentual_gordura: resultado.composicao.percentualGordura,
+                              massa_magra: resultado.composicao.massaMagra,
+                              massa_gorda: resultado.composicao.massaGorda,
+                              tmb: resultado.composicao.tmb,
+                              imc: resultado.composicao.imc,
+                              razao_cintura_quadril: resultado.indices.razaoCinturaQuadril.valor,
+                              razao_cintura_estatura: resultado.indices.razaoCinturaEstatura.valor,
+                              indice_conicidade: resultado.indices.indiceConicidade.valor,
+                              shaped_score: resultado.indices.indiceGrimaldi,
+                              altura_usada: dadosUsuario.altura,
+                              peso_usado: dadosUsuario.peso,
+                              idade_calculada: dadosUsuario.idade,
+                              sexo_usado: dadosUsuario.sexo?.toLowerCase() === 'masculino' ? 'M' : 'F',
+                              calculado_automaticamente: true
+                            });
+
+                          if (error) throw error;
+
+                          // Recarregar dados
+                          await carregarAnaliseCorporal();
+                          setShowGerarAnalise(false);
+                        } catch (error) {
+                          console.error('Erro ao salvar análise:', error);
+                          alert('Erro ao salvar análise corporal');
+                        }
+                      }}
+                      onError={(error) => {
+                        console.error('Erro na análise:', error);
+                        alert('Erro na análise: ' + error);
+                        setShowGerarAnalise(false);
+                      }}
+                    />
+                  </div>
+                ) : analiseCorporalData ? (
+                  <ResultadosAnalise resultado={analiseCorporalData} />
+                ) : (
+                  <div className="text-center py-12">
+                    <Brain className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                    <h4 className="text-lg font-medium text-slate-900 mb-2">
+                      Nenhuma análise corporal encontrada
+                    </h4>
+                    <p className="text-slate-600 mb-6">
+                      O cliente ainda não possui uma análise corporal processada.
+                    </p>
+                    <button
+                      onClick={iniciarGeracaoAnalise}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                    >
+                      <Plus className="w-5 h-5" />
+                      Gerar Análise Corporal
+                    </button>
+                  </div>
+                )}
+
+                {/* Informações administrativas */}
+                {analiseCorporalData && (
+                  <div className="mt-8 p-6 bg-slate-50 rounded-lg">
+                    <h4 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                      <FileText className="w-5 h-5" />
+                      Informações Administrativas
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm text-slate-600">Status da Análise</p>
+                        <p className="text-sm font-medium text-green-600">
+                          Concluída e disponível para o cliente
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-slate-600">Processamento</p>
+                        <p className="flex items-center gap-1 text-sm">
+                          <Zap className="w-4 h-4 text-green-600" />
+                          Automático (MediaPipe)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

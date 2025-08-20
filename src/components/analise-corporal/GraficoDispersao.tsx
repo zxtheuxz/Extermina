@@ -124,8 +124,13 @@ const GraficoDispersao: React.FC<GraficoDispersaoProps> = ({
         </h3>
         
         {/* SVG do Gráfico */}
-        <div className="flex justify-center mb-4">
-          <svg width={largura} height={altura} className="border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900">
+        <div className="w-full mb-4">
+          <div className="relative w-full" style={{ paddingBottom: '75%' }}> {/* Aspect ratio 4:3 */}
+            <svg 
+              viewBox={`0 0 ${largura} ${altura}`}
+              preserveAspectRatio="xMidYMid meet"
+              className="absolute inset-0 w-full h-full border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900"
+            >
             
             {/* Área dos quadrantes */}
             <defs>
@@ -238,7 +243,7 @@ const GraficoDispersao: React.FC<GraficoDispersaoProps> = ({
                     x={x}
                     y={margemY + areaGrafico.altura + 18}
                     textAnchor="middle"
-                    className="text-xs fill-gray-600 dark:fill-gray-400"
+                    className="text-[10px] md:text-xs fill-gray-600 dark:fill-gray-400"
                   >
                     {tick}
                   </text>
@@ -263,7 +268,7 @@ const GraficoDispersao: React.FC<GraficoDispersaoProps> = ({
                     x={margemX - 10}
                     y={y + 4}
                     textAnchor="end"
-                    className="text-xs fill-gray-600 dark:fill-gray-400"
+                    className="text-[10px] md:text-xs fill-gray-600 dark:fill-gray-400"
                   >
                     {tick}
                   </text>
@@ -286,7 +291,7 @@ const GraficoDispersao: React.FC<GraficoDispersaoProps> = ({
               x={margemX + areaGrafico.largura / 2}
               y={altura - 10}
               textAnchor="middle"
-              className="text-sm font-medium fill-gray-700 dark:fill-gray-300"
+              className="text-[11px] md:text-sm font-medium fill-gray-700 dark:fill-gray-300"
             >
               Índice de massa magra (kg/m²)
             </text>
@@ -294,12 +299,13 @@ const GraficoDispersao: React.FC<GraficoDispersaoProps> = ({
               x={20}
               y={margemY + areaGrafico.altura / 2}
               textAnchor="middle"
-              className="text-sm font-medium fill-gray-700 dark:fill-gray-300"
+              className="text-[11px] md:text-sm font-medium fill-gray-700 dark:fill-gray-300"
               transform={`rotate(-90, 20, ${margemY + areaGrafico.altura / 2})`}
             >
               Índice de massa gorda (kg/m²)
             </text>
-          </svg>
+            </svg>
+          </div>
         </div>
 
         {/* Interpretação do quadrante atual */}
@@ -328,14 +334,14 @@ const GraficoDispersao: React.FC<GraficoDispersaoProps> = ({
         <div className="mt-4 text-xs text-gray-600 dark:text-gray-400">
           <p className="font-medium mb-2">O gráfico indica a relação entre a classificação dos índices de massa gorda e massa magra, permitindo a interpretação do estado nutricional do indivíduo de forma mais eficaz que o IMC isoladamente, auxiliando no rastreamento de riscos à saúde.</p>
           
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            <div className="text-center">
-              <strong>Índice de massa magra (IMM):</strong>
-              <p>O índice avalia a quantidade de massa magra em relação à altura. Valores adequados estão associados a menores riscos de doenças crônicas, como diabetes e hipertensão, além de contribuir para melhor desempenho físico.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+            <div className="text-center md:text-left">
+              <strong className="block mb-1">Índice de massa magra (IMM):</strong>
+              <p className="text-[11px] md:text-xs">O índice avalia a quantidade de massa magra em relação à altura. Valores adequados estão associados a menores riscos de doenças crônicas, como diabetes e hipertensão, além de contribuir para melhor desempenho físico.</p>
             </div>
-            <div className="text-center">
-              <strong>Índice de massa gorda (IMG):</strong>
-              <p>Avalia a quantidade de massa gorda em relação à altura. Quanto maior for o valor, mais elevado é o risco de desenvolvimento de obesidade, doenças cardiovasculares e diabetes.</p>
+            <div className="text-center md:text-left mt-2 md:mt-0">
+              <strong className="block mb-1">Índice de massa gorda (IMG):</strong>
+              <p className="text-[11px] md:text-xs">Avalia a quantidade de massa gorda em relação à altura. Quanto maior for o valor, mais elevado é o risco de desenvolvimento de obesidade, doenças cardiovasculares e diabetes.</p>
             </div>
           </div>
         </div>
